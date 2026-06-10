@@ -6,17 +6,17 @@
 |-------|-------|
 | Document type | Technical architecture (journal-style) |
 | Period | Q1 2026 working reference |
-| Repositories | `AutiStudy` (backend) · `AutiStudy-React` (frontend) |
+| Repository | `AutiStudy-App` monorepo (`backend/` + `frontend/`) |
 | Audience | Developers, reviewers, thesis/journal appendices |
-| Status | **Latest** · May 2026 |
-| Version tag | `latest` · `v4.1-adaptive-agent` |
-| Snapshots | `AutiStudy/versions/latest/` · `AutiStudy-React/versions/latest/` |
+| Status | **Latest** · June 2026 |
+| Version tag | `v4.1-adaptive-agent` |
+| Snapshots | `frontend/versions/latest/` |
 
 ---
 
 ## Abstract
 
-AutiStudy is an adaptive AI tutoring platform designed for autistic learners in grades 4–7 (Pakistan curriculum). The system combines retrieval-augmented generation (RAG) over textbook content, multimodal explanations (text, visuals, speech), and a browser-based computer-vision (CV) agent that monitors engagement and drives a structured comprehension-check flow. Architecturally, the product is split into two repositories: a **FastAPI backend** (`AutiStudy`) that owns persistence, LLM/RAG, and content generation, and a **Next.js 14 frontend** (`AutiStudy-React`) that owns the student experience, real-time emotion fusion, and the popup-gated adaptation ladder. This document explains how both halves work together, how data flows end-to-end, and how design decisions map to user-facing behaviour.
+AutiStudy is an adaptive AI tutoring platform designed for autistic learners in grades 4–7 (Pakistan curriculum). The system combines retrieval-augmented generation (RAG) over textbook content, multimodal explanations (text, visuals, speech), and a browser-based computer-vision (CV) agent that monitors engagement and drives a structured comprehension-check flow. Architecturally, the product is a **monorepo** (`AutiStudy-App`): a **FastAPI backend** (`backend/`) that owns persistence, LLM/RAG, and content generation, and a **Next.js 14 frontend** (`frontend/`) that owns the student experience, real-time emotion fusion, and the popup-gated adaptation ladder. There is **no Streamlit UI** — the Next.js app is the sole student-facing interface. This document explains how both halves work together, how data flows end-to-end, and how design decisions map to user-facing behaviour.
 
 ---
 
@@ -52,7 +52,7 @@ The result is not a single “AI chatbot” but a **dual-runtime system**: Pytho
           │   HTTP JSON (Bearer token) · CORS :3000 → :8000
           ▼                  ▼
 ┌─────────────────────────────────────────────────────────────────────────────┐
-│                    FastAPI BACKEND (AutiStudy/api_server.py)                │
+│                    FastAPI BACKEND (backend/api_server.py)                  │
 │  Auth · Chat · Quiz · Analytics · Parent · Agent content endpoints          │
 │         │                                                                    │
 │         ├── chat_engine.py ──► utils/llm.py ──► OpenAI gpt-4o-mini         │
@@ -63,25 +63,24 @@ The result is not a single “AI chatbot” but a **dual-runtime system**: Pytho
           │
           ▼
 ┌─────────────────────────────────────────────────────────────────────────────┐
-│  JSON-on-disk persistence (shared by Streamlit legacy UI + React frontend)  │
+│  JSON-on-disk persistence (backend data/ — read/written by FastAPI + React) │
 │  data/users.json · data/chats.json · data/sessions.json · quiz_data/ · …   │
 └─────────────────────────────────────────────────────────────────────────────┘
 ```
 
 ### 2.2 Runtime ports & dev commands
 
-| Service | Port | Command (from `AutiStudy-React`) |
-|---------|------|----------------------------------|
+| Service | Port | Command (from `frontend/`) |
+|---------|------|----------------------------|
 | Next.js frontend | 3000 | `npm run dev` |
 | FastAPI backend | 8000 | `npm run dev:api` |
 | Both together | — | `npm run dev:all` |
-| Streamlit (legacy) | 7860 | Docker / `app.py` |
 
 Environment variable `NEXT_PUBLIC_API_URL` overrides the default API base `http://127.0.0.1:8000`.
 
 ### 2.3 Design principle: shared data, split intelligence
 
-The backend was originally built for Streamlit. The React app is a **thin, rich client** that calls the same JSON files and Python modules. CV and comprehension timing live entirely in the browser because:
+The React app is a **rich client** that calls the FastAPI backend over HTTP; the backend reads and writes the same JSON files on disk. CV and comprehension timing live entirely in the browser because:
 
 - Latency for 15 FPS face analysis must stay local.
 - Privacy: raw video is not transmitted.
@@ -89,29 +88,29 @@ The backend was originally built for Streamlit. The React app is a **thin, rich 
 
 ---
 
-## 3. Backend Architecture (`AutiStudy`)
+## 3. Backend Architecture (`backend/`)
 
 ### 3.1 Repository layout
 
 ```
-AutiStudy/
-├── api_server.py          # FastAPI REST API — primary React integration surface
-├── app.py                 # Streamlit entry (legacy UI, same data layer)
+backend/
+├── api_server.py          # FastAPI REST API — sole integration surface for the UI
 ├── chat_engine.py         # Bridge: API ↔ RAG/LLM/visual aids/TTS
 ├── quiz_engine.py         # GPT-powered quiz generation
+├── config/secrets.toml    # API keys (gitignored; see secrets.toml.example)
 ├── requirements.txt
 ├── data/                  # JSON persistence (users, chats, sessions, parents)
 ├── quiz_data/             # Per-student quiz analytics files
+├── OneSharedChromaDB/     # Chroma vector store for RAG
 ├── temp_generated_images/ # Generated illustrations (served at /api/generated-images)
-├── utils/                 # Core business logic (~19 modules)
-│   ├── auth.py, session.py, chat_db.py, quiz_db.py, parent_db.py
-│   ├── llm.py, rag.py, visual_aids.py, emotion.py
-│   ├── teaching_agent.py, media_agent.py, agent_memory.py
-│   └── book_parser.py, ocr.py, language.py, …
-└── views/                 # Streamlit page modules
+└── utils/                 # Core business logic
+    ├── auth.py, session.py, chat_db.py, quiz_db.py, parent_db.py
+    ├── llm.py, rag.py, visual_aids.py, emotion.py, secrets.py
+    ├── teaching_agent.py, media_agent.py, agent_memory.py
+    └── book_parser.py, ocr.py, …
 ```
 
-Textbook markdown for RAG lives in **`AutiStudy-React/books_mds/`** (Grade 4–7, subject folders). The backend reads these paths via `utils/book_parser.py`.
+Textbook markdown for RAG lives in **`frontend/books_mds/`** (Grade 4–7, subject folders). The backend reads these paths via `utils/book_parser.py` (`BOOKS_DIR = …/frontend/books_mds`).
 
 ### 3.2 FastAPI server (`api_server.py`)
 
@@ -297,16 +296,16 @@ Three overlapping agent architectures coexist:
 2. **ReAct Media Agent** (`utils/media_agent.py`) — GPT-4o function calling for `/api/agent/run` and `/api/agent/decide`.
 3. **Browser-policy + cheap content** (current React path) — `TutorPolicyEngine` + `TutorComprehensionFlow` + `/api/agent/generate-content` + `/api/agent/step-mcqs`.
 
-Production chat uses path **#3** for the comprehension ladder; path **#2** remains for full agent runs; path **#1** is legacy Streamlit-era.
+Production chat uses path **#3** for the comprehension ladder; path **#2** remains for full ReAct agent runs; path **#1** is a legacy rule-based modality ladder (superseded by #3 in the UI).
 
 ---
 
-## 4. Frontend Architecture (`AutiStudy-React`)
+## 4. Frontend Architecture (`frontend/`)
 
 ### 4.1 Repository layout
 
 ```
-AutiStudy-React/
+frontend/
 ├── app/                    # Next.js 14 App Router pages
 │   ├── chat/page.tsx       # Main tutor (~2900 lines — core product)
 │   ├── dashboard/, quiz/, analytics/
@@ -581,7 +580,7 @@ Eight lab emotions: `happy`, `sad`, `frustrated`, `bored`, `tired`, `inattentive
 | Authentication | Bearer tokens in localStorage; bcrypt passwords |
 | CV privacy | All inference client-side; no video upload |
 | CORS | Explicit allowlist for dev origins |
-| API keys | Backend only (env / `.streamlit/secrets.toml`) |
+| API keys | Backend only (env / `backend/config/secrets.toml`) |
 | Startup warmup | Background thread preloads RAG + OpenAI TLS (Windows-sensitive) |
 | Data durability | JSON files — suitable for demo/single-server; not horizontally scaled |
 
@@ -589,7 +588,7 @@ Eight lab emotions: `happy`, `sad`, `frustrated`, `bored`, `tired`, `inattentive
 
 ## 7. Known Architectural Tensions & Future Work
 
-1. **Three agent paths** — legacy Streamlit ladder, ReAct media agent, and browser-policy flow coexist; consolidation would reduce maintenance.
+1. **Three agent paths** — legacy rule-based ladder, ReAct media agent, and browser-policy flow coexist; consolidation would reduce maintenance.
 2. **JSON persistence** — simple but limits concurrency and audit trails.
 3. **Subject naming** — `"Computer"` vs `"Computer Science"` mismatch in some modules.
 4. **ChromaDB path** — `OneSharedChromaDB/` must exist locally or RAG degrades to pure GPT.

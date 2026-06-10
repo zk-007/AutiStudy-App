@@ -2,7 +2,7 @@
 Build Word document with per-grade tables: subject, chapter count, chunk count.
 Chapter counts from utils/book_parser.py; chunk counts from OneSharedChromaDB.
 
-Run from AutiStudy-React:
+Run from AutiStudy-App/frontend:
   python scripts/generate_dataset_statistics_docx.py
 
 Requires: python-docx, chromadb; backend path ../AutiStudy

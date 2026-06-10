@@ -1,36 +1,31 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# AutiStudy Frontend (Next.js 14)
 
-## Getting Started
+Student and parent web interface for AutiStudy. This is the **sole UI** — there is no Streamlit frontend.
 
-First, run the development server:
+Part of the **`AutiStudy-App`** monorepo (`../backend` is the FastAPI API).
+
+## Quick start
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+npm install
+npm run dev:all    # Next.js :3000 + FastAPI :8000
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Requires `../backend/config/secrets.toml` with your OpenAI API key.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Key routes
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+| Path | Purpose |
+|------|---------|
+| `/` | Landing page |
+| `/chat` | AI tutor + adaptive agent |
+| `/quiz` | Practice quizzes |
+| `/analytics` | Student progress |
+| `/parent/dashboard` | Parent view |
+| `/expression-lab` | CV strategy benchmark |
 
-## Learn More
+## Documentation
 
-To learn more about Next.js, take a look at the following resources:
-
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+- `docs/AUTISTUDY WORKING - latest.md` — full architecture
+- `docs/adaptive-agent-flow.md` — comprehension popup ladder
+- `docs/agent-evaluation.md` — agent metrics (routing accuracy, consistency)

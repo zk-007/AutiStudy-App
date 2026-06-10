@@ -9,7 +9,7 @@ Reads:
 Writes:
   docs/AutiStudy_Agent_Evaluation.docx
 
-Run (after running the two eval scripts) from AutiStudy-React:
+Run (after running the two eval scripts) from AutiStudy-App/frontend:
   python scripts/eval/router_eval.py
   python scripts/eval/agent_eval.py --k 5
   python scripts/generate_agent_evaluation_docx.py

@@ -1,10 +1,13 @@
-# AutiStudy React + 3D Implementation Plan
+# AutiStudy React Implementation Plan
+
+> **Status: COMPLETED** (June 2026) — implemented as the `AutiStudy-App` monorepo.
+> Streamlit UI has been removed; Next.js is the sole frontend.
 
 ## 📋 Project Overview
 
-**Goal:** Transform AutiStudy from a Streamlit application into a modern React-based 3D website with an intelligent pedagogical agent that autonomously decides the optimal learning modality (text, image, voice) for autistic students.
+**Goal:** Deliver a modern React-based website with an intelligent pedagogical agent that autonomously decides the optimal learning modality (text, image, voice) for autistic students.
 
-**Architecture:** Separate frontend (React) and backend (FastAPI) repositories/folders, communicating via REST API and WebSockets.
+**Architecture:** Monorepo (`AutiStudy-App`) with `frontend/` (Next.js 14) and `backend/` (FastAPI), communicating via REST API. Browser-side CV handles emotion fusion locally.
 
 ---
 

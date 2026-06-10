@@ -8,15 +8,15 @@ evaluation story (retriever ✓, RAT ✓, agent ✓).
 Two routing layers are assessed:
 
 1. **Visual-aid router** — deterministic regex
-   (`../AutiStudy/utils/visual_aids.py :: classify_visual_request`) that routes a
+   (`backend/utils/visual_aids.py :: classify_visual_request`) that routes a
    student question into one of 11 visual tracks.
 2. **ReAct teaching agent** — GPT-4o tool-caller
-   (`../AutiStudy/utils/media_agent.py :: decide_from_emotion`) that picks one of
+   (`backend/utils/media_agent.py :: decide_from_emotion`) that picks one of
    8 teaching actions from the student's emotion + confusion state.
 
 ## How to reproduce
 
-Run from the `AutiStudy-React` project root:
+Run from the `AutiStudy-App/frontend/` directory:
 
 ```bash
 python scripts/eval/router_eval.py            # deterministic, free, instant
@@ -25,7 +25,7 @@ python scripts/generate_agent_evaluation_docx.py
 ```
 
 The agent eval reads the OpenAI key from the environment or, failing that, from
-`../AutiStudy/.streamlit/secrets.toml`. Gold datasets live in
+`backend/config/secrets.toml`. Gold datasets live in
 `scripts/eval/datasets/`; raw results in `scripts/eval/results/`.
 
 ## Metrics

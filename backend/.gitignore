@@ -1,0 +1,44 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environments
+venv/
+env/
+.env
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Streamlit secrets (NEVER commit this!)
+.streamlit/secrets.toml
+.streamlit/*.txt
+
+# Data files (sessions, chats - these are temporary)
+data/sessions.json
+data/chats.json
+
+# Keep users.json - contains registered accounts
+
+# ChromaDB (too large for GitHub, will need separate hosting)
+shared_chroma_db/
+chroma_db/
+*.db
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Jupyter notebooks checkpoints
+.ipynb_checkpoints/
+
+# API keys
+*api_key*.txt
+*_key.txt

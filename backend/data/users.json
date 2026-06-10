@@ -1,0 +1,746 @@
+{
+  "zohakhalid1204@gmail.com": {
+    "name": "Zoha",
+    "email": "zohakhalid1204@gmail.com",
+    "password": "$2b$12$1Oelf2VkAY3oyt5m78wfBuiW1EvAQBn0Bu64.DDWm7vvpi7CK17n.",
+    "role": "Student",
+    "grade": 4,
+    "stars": 8,
+    "badges": [],
+    "progress": {}
+  },
+  "apitest@autistudy.local": {
+    "name": "API Test User",
+    "email": "apitest@autistudy.local",
+    "password": "937e8d5fbb48bd4949536cd65b8d35c426b80d2f830c5c308e2cdec422ae2244",
+    "role": "student",
+    "grade": 6,
+    "stars": 0,
+    "badges": [],
+    "progress": {}
+  },
+  "diag+1776724886864@autistudy.local": {
+    "name": "DiagUser",
+    "email": "diag+1776724886864@autistudy.local",
+    "password": "937e8d5fbb48bd4949536cd65b8d35c426b80d2f830c5c308e2cdec422ae2244",
+    "role": "student",
+    "grade": 6,
+    "stars": 0,
+    "badges": [],
+    "progress": {}
+  },
+  "e2e+1776724917688@autistudy.local": {
+    "name": "E2E Tester",
+    "email": "e2e+1776724917688@autistudy.local",
+    "password": "937e8d5fbb48bd4949536cd65b8d35c426b80d2f830c5c308e2cdec422ae2244",
+    "role": "student",
+    "grade": 6,
+    "stars": 0,
+    "badges": [],
+    "progress": {}
+  },
+  "loguser+1776724996780@autistudy.local": {
+    "name": "LogoutUser",
+    "email": "loguser+1776724996780@autistudy.local",
+    "password": "937e8d5fbb48bd4949536cd65b8d35c426b80d2f830c5c308e2cdec422ae2244",
+    "role": "student",
+    "grade": 5,
+    "stars": 0,
+    "badges": [],
+    "progress": {}
+  },
+  "polish+1776727098468@autistudy.local": {
+    "name": "Sarah",
+    "email": "polish+1776727098468@autistudy.local",
+    "password": "937e8d5fbb48bd4949536cd65b8d35c426b80d2f830c5c308e2cdec422ae2244",
+    "role": "student",
+    "grade": 6,
+    "stars": 0,
+    "badges": [],
+    "progress": {}
+  },
+  "polish-stats+1776727159017@autistudy.local": {
+    "name": "Ayan",
+    "email": "polish-stats+1776727159017@autistudy.local",
+    "password": "937e8d5fbb48bd4949536cd65b8d35c426b80d2f830c5c308e2cdec422ae2244",
+    "role": "student",
+    "grade": 6,
+    "stars": 0,
+    "badges": [],
+    "progress": {}
+  },
+  "quick685957695@test.com": {
+    "name": "QuickTest",
+    "email": "quick685957695@test.com",
+    "password": "937e8d5fbb48bd4949536cd65b8d35c426b80d2f830c5c308e2cdec422ae2244",
+    "role": "student",
+    "grade": 6,
+    "stars": 0,
+    "badges": [],
+    "progress": {}
+  },
+  "chatv1+1776728362556@autistudy.local": {
+    "name": "Hina",
+    "email": "chatv1+1776728362556@autistudy.local",
+    "password": "937e8d5fbb48bd4949536cd65b8d35c426b80d2f830c5c308e2cdec422ae2244",
+    "role": "student",
+    "grade": 6,
+    "stars": 0,
+    "badges": [],
+    "progress": {}
+  },
+  "picker+1776728534680@autistudy.local": {
+    "name": "Mira",
+    "email": "picker+1776728534680@autistudy.local",
+    "password": "937e8d5fbb48bd4949536cd65b8d35c426b80d2f830c5c308e2cdec422ae2244",
+    "role": "student",
+    "grade": 5,
+    "stars": 0,
+    "badges": [],
+    "progress": {}
+  },
+  "chatv1+1776728554122@autistudy.local": {
+    "name": "Hina",
+    "email": "chatv1+1776728554122@autistudy.local",
+    "password": "937e8d5fbb48bd4949536cd65b8d35c426b80d2f830c5c308e2cdec422ae2244",
+    "role": "student",
+    "grade": 6,
+    "stars": 0,
+    "badges": [],
+    "progress": {}
+  },
+  "chatv1+1776728639267@autistudy.local": {
+    "name": "Hina",
+    "email": "chatv1+1776728639267@autistudy.local",
+    "password": "937e8d5fbb48bd4949536cd65b8d35c426b80d2f830c5c308e2cdec422ae2244",
+    "role": "student",
+    "grade": 6,
+    "stars": 0,
+    "badges": [],
+    "progress": {}
+  },
+  "realllm+1776730436087@autistudy.local": {
+    "name": "Sara",
+    "email": "realllm+1776730436087@autistudy.local",
+    "password": "937e8d5fbb48bd4949536cd65b8d35c426b80d2f830c5c308e2cdec422ae2244",
+    "role": "student",
+    "grade": 6,
+    "stars": 0,
+    "badges": [],
+    "progress": {}
+  },
+  "banner+1776730443553@autistudy.local": {
+    "name": "Ali",
+    "email": "banner+1776730443553@autistudy.local",
+    "password": "937e8d5fbb48bd4949536cd65b8d35c426b80d2f830c5c308e2cdec422ae2244",
+    "role": "student",
+    "grade": 4,
+    "stars": 0,
+    "badges": [],
+    "progress": {}
+  },
+  "realllm+1776730478512@autistudy.local": {
+    "name": "Sara",
+    "email": "realllm+1776730478512@autistudy.local",
+    "password": "937e8d5fbb48bd4949536cd65b8d35c426b80d2f830c5c308e2cdec422ae2244",
+    "role": "student",
+    "grade": 6,
+    "stars": 0,
+    "badges": [],
+    "progress": {}
+  },
+  "banner+1776730490070@autistudy.local": {
+    "name": "Ali",
+    "email": "banner+1776730490070@autistudy.local",
+    "password": "937e8d5fbb48bd4949536cd65b8d35c426b80d2f830c5c308e2cdec422ae2244",
+    "role": "student",
+    "grade": 4,
+    "stars": 0,
+    "badges": [],
+    "progress": {}
+  },
+  "ragtest_1746@example.com": {
+    "name": "RAG Tester",
+    "email": "ragtest_1746@example.com",
+    "password": "937e8d5fbb48bd4949536cd65b8d35c426b80d2f830c5c308e2cdec422ae2244",
+    "role": "student",
+    "grade": 4,
+    "stars": 0,
+    "badges": [],
+    "progress": {}
+  },
+  "rag+1776739756338@autistudy.local": {
+    "name": "Aisha",
+    "email": "rag+1776739756338@autistudy.local",
+    "password": "937e8d5fbb48bd4949536cd65b8d35c426b80d2f830c5c308e2cdec422ae2244",
+    "role": "student",
+    "grade": 4,
+    "stars": 0,
+    "badges": [],
+    "progress": {}
+  },
+  "rag+1776739902792@autistudy.local": {
+    "name": "Aisha",
+    "email": "rag+1776739902792@autistudy.local",
+    "password": "937e8d5fbb48bd4949536cd65b8d35c426b80d2f830c5c308e2cdec422ae2244",
+    "role": "student",
+    "grade": 4,
+    "stars": 0,
+    "badges": [],
+    "progress": {}
+  },
+  "rag+1776740052670@autistudy.local": {
+    "name": "Aisha",
+    "email": "rag+1776740052670@autistudy.local",
+    "password": "937e8d5fbb48bd4949536cd65b8d35c426b80d2f830c5c308e2cdec422ae2244",
+    "role": "student",
+    "grade": 4,
+    "stars": 0,
+    "badges": [],
+    "progress": {}
+  },
+  "rag+1776740215637@autistudy.local": {
+    "name": "Aisha",
+    "email": "rag+1776740215637@autistudy.local",
+    "password": "937e8d5fbb48bd4949536cd65b8d35c426b80d2f830c5c308e2cdec422ae2244",
+    "role": "student",
+    "grade": 4,
+    "stars": 0,
+    "badges": [],
+    "progress": {}
+  },
+  "rag+1776740323693@autistudy.local": {
+    "name": "Aisha",
+    "email": "rag+1776740323693@autistudy.local",
+    "password": "937e8d5fbb48bd4949536cd65b8d35c426b80d2f830c5c308e2cdec422ae2244",
+    "role": "student",
+    "grade": 4,
+    "stars": 0,
+    "badges": [],
+    "progress": {}
+  },
+  "mdtest_1776741860271@autistudy.test": {
+    "name": "MD Test",
+    "email": "mdtest_1776741860271@autistudy.test",
+    "password": "a2d679bed5c2f57e3540f88caa01d559c26a0df07df451b9d099d0a84bd5cf05",
+    "role": "student",
+    "grade": 4,
+    "stars": 0,
+    "badges": [],
+    "progress": {}
+  },
+  "hdrtest_1776742359613@autistudy.test": {
+    "name": "Hdr",
+    "email": "hdrtest_1776742359613@autistudy.test",
+    "password": "a2d679bed5c2f57e3540f88caa01d559c26a0df07df451b9d099d0a84bd5cf05",
+    "role": "student",
+    "grade": 4,
+    "stars": 0,
+    "badges": [],
+    "progress": {}
+  },
+  "hdrtest_1776742458553@autistudy.test": {
+    "name": "Hdr",
+    "email": "hdrtest_1776742458553@autistudy.test",
+    "password": "a2d679bed5c2f57e3540f88caa01d559c26a0df07df451b9d099d0a84bd5cf05",
+    "role": "student",
+    "grade": 4,
+    "stars": 0,
+    "badges": [],
+    "progress": {}
+  },
+  "mathtest_1776759807419@autistudy.test": {
+    "name": "Math Test",
+    "email": "mathtest_1776759807419@autistudy.test",
+    "password": "a2d679bed5c2f57e3540f88caa01d559c26a0df07df451b9d099d0a84bd5cf05",
+    "role": "student",
+    "grade": 4,
+    "stars": 0,
+    "badges": [],
+    "progress": {}
+  },
+  "aidtest_1776764824612@autistudy.test": {
+    "name": "AidTest",
+    "email": "aidtest_1776764824612@autistudy.test",
+    "password": "a2d679bed5c2f57e3540f88caa01d559c26a0df07df451b9d099d0a84bd5cf05",
+    "role": "student",
+    "grade": 4,
+    "stars": 0,
+    "badges": [],
+    "progress": {}
+  },
+  "aidtest_1776764886054@autistudy.test": {
+    "name": "AidTest",
+    "email": "aidtest_1776764886054@autistudy.test",
+    "password": "a2d679bed5c2f57e3540f88caa01d559c26a0df07df451b9d099d0a84bd5cf05",
+    "role": "student",
+    "grade": 4,
+    "stars": 0,
+    "badges": [],
+    "progress": {}
+  },
+  "aidtest_1776765259110@autistudy.test": {
+    "name": "AidTest",
+    "email": "aidtest_1776765259110@autistudy.test",
+    "password": "a2d679bed5c2f57e3540f88caa01d559c26a0df07df451b9d099d0a84bd5cf05",
+    "role": "student",
+    "grade": 4,
+    "stars": 0,
+    "badges": [],
+    "progress": {}
+  },
+  "aidtest_1776765524913@autistudy.test": {
+    "name": "AidTest",
+    "email": "aidtest_1776765524913@autistudy.test",
+    "password": "a2d679bed5c2f57e3540f88caa01d559c26a0df07df451b9d099d0a84bd5cf05",
+    "role": "student",
+    "grade": 4,
+    "stars": 0,
+    "badges": [],
+    "progress": {}
+  },
+  "aidtest_1776765667787@autistudy.test": {
+    "name": "AidTest",
+    "email": "aidtest_1776765667787@autistudy.test",
+    "password": "a2d679bed5c2f57e3540f88caa01d559c26a0df07df451b9d099d0a84bd5cf05",
+    "role": "student",
+    "grade": 4,
+    "stars": 0,
+    "badges": [],
+    "progress": {}
+  },
+  "aidtest_1776765801598@autistudy.test": {
+    "name": "AidTest",
+    "email": "aidtest_1776765801598@autistudy.test",
+    "password": "a2d679bed5c2f57e3540f88caa01d559c26a0df07df451b9d099d0a84bd5cf05",
+    "role": "student",
+    "grade": 4,
+    "stars": 0,
+    "badges": [],
+    "progress": {}
+  },
+  "aidtest_1776765960206@autistudy.test": {
+    "name": "AidTest",
+    "email": "aidtest_1776765960206@autistudy.test",
+    "password": "a2d679bed5c2f57e3540f88caa01d559c26a0df07df451b9d099d0a84bd5cf05",
+    "role": "student",
+    "grade": 4,
+    "stars": 0,
+    "badges": [],
+    "progress": {}
+  },
+  "aidtest_1776766158136@autistudy.test": {
+    "name": "AidTest",
+    "email": "aidtest_1776766158136@autistudy.test",
+    "password": "a2d679bed5c2f57e3540f88caa01d559c26a0df07df451b9d099d0a84bd5cf05",
+    "role": "student",
+    "grade": 4,
+    "stars": 0,
+    "badges": [],
+    "progress": {}
+  },
+  "aidtest_1776766347747@autistudy.test": {
+    "name": "AidTest",
+    "email": "aidtest_1776766347747@autistudy.test",
+    "password": "a2d679bed5c2f57e3540f88caa01d559c26a0df07df451b9d099d0a84bd5cf05",
+    "role": "student",
+    "grade": 4,
+    "stars": 0,
+    "badges": [],
+    "progress": {}
+  },
+  "aidtest_1776766713265@autistudy.test": {
+    "name": "AidTest",
+    "email": "aidtest_1776766713265@autistudy.test",
+    "password": "a2d679bed5c2f57e3540f88caa01d559c26a0df07df451b9d099d0a84bd5cf05",
+    "role": "student",
+    "grade": 4,
+    "stars": 0,
+    "badges": [],
+    "progress": {}
+  },
+  "aidtest_1776767288750@autistudy.test": {
+    "name": "AidTest",
+    "email": "aidtest_1776767288750@autistudy.test",
+    "password": "a2d679bed5c2f57e3540f88caa01d559c26a0df07df451b9d099d0a84bd5cf05",
+    "role": "student",
+    "grade": 4,
+    "stars": 0,
+    "badges": [],
+    "progress": {}
+  },
+  "aidtest_1776767845386@autistudy.test": {
+    "name": "AidTest",
+    "email": "aidtest_1776767845386@autistudy.test",
+    "password": "a2d679bed5c2f57e3540f88caa01d559c26a0df07df451b9d099d0a84bd5cf05",
+    "role": "student",
+    "grade": 4,
+    "stars": 0,
+    "badges": [],
+    "progress": {}
+  },
+  "aidtest_1776768059178@autistudy.test": {
+    "name": "AidTest",
+    "email": "aidtest_1776768059178@autistudy.test",
+    "password": "a2d679bed5c2f57e3540f88caa01d559c26a0df07df451b9d099d0a84bd5cf05",
+    "role": "student",
+    "grade": 4,
+    "stars": 0,
+    "badges": [],
+    "progress": {}
+  },
+  "aidtest_1776768662691@autistudy.test": {
+    "name": "AidTest",
+    "email": "aidtest_1776768662691@autistudy.test",
+    "password": "a2d679bed5c2f57e3540f88caa01d559c26a0df07df451b9d099d0a84bd5cf05",
+    "role": "student",
+    "grade": 4,
+    "stars": 0,
+    "badges": [],
+    "progress": {}
+  },
+  "aidtest_1776769124457@autistudy.test": {
+    "name": "AidTest",
+    "email": "aidtest_1776769124457@autistudy.test",
+    "password": "a2d679bed5c2f57e3540f88caa01d559c26a0df07df451b9d099d0a84bd5cf05",
+    "role": "student",
+    "grade": 4,
+    "stars": 0,
+    "badges": [],
+    "progress": {}
+  },
+  "aidtest_1776769634921@autistudy.test": {
+    "name": "AidTest",
+    "email": "aidtest_1776769634921@autistudy.test",
+    "password": "a2d679bed5c2f57e3540f88caa01d559c26a0df07df451b9d099d0a84bd5cf05",
+    "role": "student",
+    "grade": 4,
+    "stars": 0,
+    "badges": [],
+    "progress": {}
+  },
+  "aidtest_1776770051609@autistudy.test": {
+    "name": "AidTest",
+    "email": "aidtest_1776770051609@autistudy.test",
+    "password": "a2d679bed5c2f57e3540f88caa01d559c26a0df07df451b9d099d0a84bd5cf05",
+    "role": "student",
+    "grade": 4,
+    "stars": 0,
+    "badges": [],
+    "progress": {}
+  },
+  "btnrow_1776773791436@autistudy.test": {
+    "name": "BtnRow",
+    "email": "btnrow_1776773791436@autistudy.test",
+    "password": "a2d679bed5c2f57e3540f88caa01d559c26a0df07df451b9d099d0a84bd5cf05",
+    "role": "student",
+    "grade": 4,
+    "stars": 0,
+    "badges": [],
+    "progress": {}
+  },
+  "divtest_1776780549959@autistudy.test": {
+    "name": "DivTest",
+    "email": "divtest_1776780549959@autistudy.test",
+    "password": "a2d679bed5c2f57e3540f88caa01d559c26a0df07df451b9d099d0a84bd5cf05",
+    "role": "student",
+    "grade": 4,
+    "stars": 0,
+    "badges": [],
+    "progress": {}
+  },
+  "divtest_1776781157941@autistudy.test": {
+    "name": "DivTest",
+    "email": "divtest_1776781157941@autistudy.test",
+    "password": "a2d679bed5c2f57e3540f88caa01d559c26a0df07df451b9d099d0a84bd5cf05",
+    "role": "student",
+    "grade": 4,
+    "stars": 0,
+    "badges": [],
+    "progress": {}
+  },
+  "divtest_1776781575485@autistudy.test": {
+    "name": "DivTest",
+    "email": "divtest_1776781575485@autistudy.test",
+    "password": "a2d679bed5c2f57e3540f88caa01d559c26a0df07df451b9d099d0a84bd5cf05",
+    "role": "student",
+    "grade": 4,
+    "stars": 0,
+    "badges": [],
+    "progress": {}
+  },
+  "redir+1776830970068@autistudy.test": {
+    "name": "Redir Tester",
+    "email": "redir+1776830970068@autistudy.test",
+    "password": "724936cd9b665b34b178904d938970b9fffede7f6fcbae3e0f61b87170c06feb",
+    "role": "student",
+    "grade": 4,
+    "stars": 0,
+    "badges": [],
+    "progress": {}
+  },
+  "lat+1776836548283@autistudy.test": {
+    "name": "Latency Tester",
+    "email": "lat+1776836548283@autistudy.test",
+    "password": "724936cd9b665b34b178904d938970b9fffede7f6fcbae3e0f61b87170c06feb",
+    "role": "student",
+    "grade": 4,
+    "stars": 0,
+    "badges": [],
+    "progress": {}
+  },
+  "lat+1776836671288@autistudy.test": {
+    "name": "Latency Tester",
+    "email": "lat+1776836671288@autistudy.test",
+    "password": "724936cd9b665b34b178904d938970b9fffede7f6fcbae3e0f61b87170c06feb",
+    "role": "student",
+    "grade": 4,
+    "stars": 0,
+    "badges": [],
+    "progress": {}
+  },
+  "emoji+1776961408505@autistudy.test": {
+    "name": "Emoji Tester",
+    "email": "emoji+1776961408505@autistudy.test",
+    "password": "724936cd9b665b34b178904d938970b9fffede7f6fcbae3e0f61b87170c06feb",
+    "role": "student",
+    "grade": 4,
+    "stars": 0,
+    "badges": [],
+    "progress": {}
+  },
+  "emoji+1776961970422@autistudy.test": {
+    "name": "T",
+    "email": "emoji+1776961970422@autistudy.test",
+    "password": "724936cd9b665b34b178904d938970b9fffede7f6fcbae3e0f61b87170c06feb",
+    "role": "student",
+    "grade": 4,
+    "stars": 0,
+    "badges": [],
+    "progress": {}
+  },
+  "speed+1777005754540@autistudy.test": {
+    "name": "Speed",
+    "email": "speed+1777005754540@autistudy.test",
+    "password": "54de7f606f2523cba8efac173fab42fb7f59d56ceff974c8fdb7342cf2cfe345",
+    "role": "student",
+    "grade": 4,
+    "stars": 0,
+    "badges": [],
+    "progress": {}
+  },
+  "speed2+1777006347083@autistudy.test": {
+    "name": "Speed",
+    "email": "speed2+1777006347083@autistudy.test",
+    "password": "54de7f606f2523cba8efac173fab42fb7f59d56ceff974c8fdb7342cf2cfe345",
+    "role": "student",
+    "grade": 4,
+    "stars": 0,
+    "badges": [],
+    "progress": {}
+  },
+  "speed3+1777006793881@autistudy.test": {
+    "name": "Speed",
+    "email": "speed3+1777006793881@autistudy.test",
+    "password": "54de7f606f2523cba8efac173fab42fb7f59d56ceff974c8fdb7342cf2cfe345",
+    "role": "student",
+    "grade": 4,
+    "stars": 0,
+    "badges": [],
+    "progress": {}
+  },
+  "sp4+1777007241452@t.com": {
+    "name": "Speed",
+    "email": "sp4+1777007241452@t.com",
+    "password": "54de7f606f2523cba8efac173fab42fb7f59d56ceff974c8fdb7342cf2cfe345",
+    "role": "student",
+    "grade": 4,
+    "stars": 0,
+    "badges": [],
+    "progress": {}
+  },
+  "sp5+1777007431860@t.com": {
+    "name": "Speed2",
+    "email": "sp5+1777007431860@t.com",
+    "password": "54de7f606f2523cba8efac173fab42fb7f59d56ceff974c8fdb7342cf2cfe345",
+    "role": "student",
+    "grade": 4,
+    "stars": 0,
+    "badges": [],
+    "progress": {}
+  },
+  "fast+1777007783038@t.com": {
+    "name": "Fast",
+    "email": "fast+1777007783038@t.com",
+    "password": "54de7f606f2523cba8efac173fab42fb7f59d56ceff974c8fdb7342cf2cfe345",
+    "role": "student",
+    "grade": 4,
+    "stars": 0,
+    "badges": [],
+    "progress": {}
+  },
+  "fast2+1777008119593@t.com": {
+    "name": "Fast",
+    "email": "fast2+1777008119593@t.com",
+    "password": "54de7f606f2523cba8efac173fab42fb7f59d56ceff974c8fdb7342cf2cfe345",
+    "role": "student",
+    "grade": 4,
+    "stars": 0,
+    "badges": [],
+    "progress": {}
+  },
+  "fast3+1777008489390@t.com": {
+    "name": "Fast",
+    "email": "fast3+1777008489390@t.com",
+    "password": "54de7f606f2523cba8efac173fab42fb7f59d56ceff974c8fdb7342cf2cfe345",
+    "role": "student",
+    "grade": 4,
+    "stars": 0,
+    "badges": [],
+    "progress": {}
+  },
+  "fast4+1777008830015@t.com": {
+    "name": "Fast",
+    "email": "fast4+1777008830015@t.com",
+    "password": "54de7f606f2523cba8efac173fab42fb7f59d56ceff974c8fdb7342cf2cfe345",
+    "role": "student",
+    "grade": 4,
+    "stars": 0,
+    "badges": [],
+    "progress": {}
+  },
+  "fast5+1777009264213@t.com": {
+    "name": "Fast",
+    "email": "fast5+1777009264213@t.com",
+    "password": "54de7f606f2523cba8efac173fab42fb7f59d56ceff974c8fdb7342cf2cfe345",
+    "role": "student",
+    "grade": 4,
+    "stars": 0,
+    "badges": [],
+    "progress": {}
+  },
+  "fast6+1777009687477@t.com": {
+    "name": "Fast",
+    "email": "fast6+1777009687477@t.com",
+    "password": "54de7f606f2523cba8efac173fab42fb7f59d56ceff974c8fdb7342cf2cfe345",
+    "role": "student",
+    "grade": 4,
+    "stars": 0,
+    "badges": [],
+    "progress": {}
+  },
+  "fast7+1777010073282@t.com": {
+    "name": "Fast",
+    "email": "fast7+1777010073282@t.com",
+    "password": "54de7f606f2523cba8efac173fab42fb7f59d56ceff974c8fdb7342cf2cfe345",
+    "role": "student",
+    "grade": 4,
+    "stars": 0,
+    "badges": [],
+    "progress": {}
+  },
+  "fast8+1777010530234@t.com": {
+    "name": "Fast",
+    "email": "fast8+1777010530234@t.com",
+    "password": "54de7f606f2523cba8efac173fab42fb7f59d56ceff974c8fdb7342cf2cfe345",
+    "role": "student",
+    "grade": 4,
+    "stars": 0,
+    "badges": [],
+    "progress": {}
+  },
+  "fast9+1777011037101@t.com": {
+    "name": "Fast",
+    "email": "fast9+1777011037101@t.com",
+    "password": "54de7f606f2523cba8efac173fab42fb7f59d56ceff974c8fdb7342cf2cfe345",
+    "role": "student",
+    "grade": 4,
+    "stars": 0,
+    "badges": [],
+    "progress": {}
+  },
+  "fast10+1777011521569@t.com": {
+    "name": "Fast",
+    "email": "fast10+1777011521569@t.com",
+    "password": "54de7f606f2523cba8efac173fab42fb7f59d56ceff974c8fdb7342cf2cfe345",
+    "role": "student",
+    "grade": 4,
+    "stars": 0,
+    "badges": [],
+    "progress": {}
+  },
+  "t1+1777012036660@t.com": {
+    "name": "T",
+    "email": "t1+1777012036660@t.com",
+    "password": "54de7f606f2523cba8efac173fab42fb7f59d56ceff974c8fdb7342cf2cfe345",
+    "role": "student",
+    "grade": 4,
+    "stars": 0,
+    "badges": [],
+    "progress": {}
+  },
+  "fast11+1777012654259@t.com": {
+    "name": "Fast",
+    "email": "fast11+1777012654259@t.com",
+    "password": "54de7f606f2523cba8efac173fab42fb7f59d56ceff974c8fdb7342cf2cfe345",
+    "role": "student",
+    "grade": 4,
+    "stars": 0,
+    "badges": [],
+    "progress": {}
+  },
+  "cur+1777012676726@t.com": {
+    "name": "Curriculum",
+    "email": "cur+1777012676726@t.com",
+    "password": "54de7f606f2523cba8efac173fab42fb7f59d56ceff974c8fdb7342cf2cfe345",
+    "role": "student",
+    "grade": 4,
+    "stars": 0,
+    "badges": [],
+    "progress": {}
+  },
+  "final+1777013059175@t.com": {
+    "name": "Final",
+    "email": "final+1777013059175@t.com",
+    "password": "54de7f606f2523cba8efac173fab42fb7f59d56ceff974c8fdb7342cf2cfe345",
+    "role": "student",
+    "grade": 4,
+    "stars": 0,
+    "badges": [],
+    "progress": {}
+  },
+  "chat2+1777013568553@t.com": {
+    "name": "Chat2",
+    "email": "chat2+1777013568553@t.com",
+    "password": "54de7f606f2523cba8efac173fab42fb7f59d56ceff974c8fdb7342cf2cfe345",
+    "role": "student",
+    "grade": 4,
+    "stars": 0,
+    "badges": [],
+    "progress": {}
+  },
+  "final2+1777014172391@t.com": {
+    "name": "Final",
+    "email": "final2+1777014172391@t.com",
+    "password": "54de7f606f2523cba8efac173fab42fb7f59d56ceff974c8fdb7342cf2cfe345",
+    "role": "student",
+    "grade": 4,
+    "stars": 0,
+    "badges": [],
+    "progress": {}
+  },
+  "bhatti@gmail.com": {
+    "name": "Tayyaba Sikandar",
+    "email": "bhatti@gmail.com",
+    "password": "$2b$12$QXgedSdPI7VYVWTSi6r4KuHDg8ZDQh4EpD0UcoOAtQ/LKufhCvaqq",
+    "role": "student",
+    "grade": 5,
+    "stars": 8,
+    "badges": [],
+    "progress": {},
+    "cnic": "34302-8423508-4",
+    "father_cnic": "34302-1202978-7",
+    "mother_cnic": null,
+    "bform_verified": true
+  }
+}

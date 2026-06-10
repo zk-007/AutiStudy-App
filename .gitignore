@@ -1,0 +1,28 @@
+# ── Node / Next.js (frontend) ────────────────────────────────────────────────
+frontend/node_modules/
+frontend/.next/
+frontend/out/
+frontend/tsconfig.tsbuildinfo
+node_modules/
+
+# ── Python (backend + scripts) ───────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+
+# ── Secrets ───────────────────────────────────────────────────────────────────
+backend/.streamlit/secrets.toml
+*.env
+.env
+
+# ── Runtime / generated artifacts ────────────────────────────────────────────
+backend/temp_generated_images/
+frontend/public/generated-images/
+backend/data/agent_memory/
+
+# ── OS / editor ───────────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+desktop.ini

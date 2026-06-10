@@ -74,8 +74,8 @@ def build() -> Document:
         "and long-term student memory."
     )
     doc.add_paragraph(
-        "The frontend and backend are maintained in sibling repositories (AutiStudy-React and "
-        "AutiStudy) and communicate via a typed REST client with Bearer-token authentication. "
+        "The frontend and backend live in one monorepo (AutiStudy-App: frontend/ + backend/) "
+        "and communicate via a typed REST client with Bearer-token authentication. "
         "Curriculum markdown derived from Pakistan Single National Curriculum (SNC) textbooks "
         "(Grades 4–7: Mathematics, General Science, Computer Science) is ingested into ChromaDB "
         "after LLaMA Parse extraction. Production tutoring combines server-side RAG answers with "
@@ -142,7 +142,7 @@ def build() -> Document:
         "Authentication employs 32-character hex Bearer tokens (SHA-256 derived, seven-day TTL) with "
         "bcrypt password hashing (12 rounds; legacy SHA-256 migration on login). Persistence is "
         "file-based JSON under data/ (users, sessions, chats, parents, agent_memory) plus "
-        "quiz_data/ per student—appropriate for a research prototype shared with a legacy Streamlit UI."
+        "quiz_data/ per student—appropriate for a research prototype with a single Next.js UI."
     )
     add_table(
         doc,
@@ -293,7 +293,7 @@ def build() -> Document:
     doc.add_paragraph()
     note = doc.add_paragraph(
         "Document generated from AutiStudy_Final_Research_Guide.pdf (Section 4) and aligned with "
-        "AutiStudy / AutiStudy-React implementation (v4.1 adaptive-agent, May 2026)."
+        "AutiStudy-App monorepo implementation (v4.1 adaptive-agent, June 2026)."
     )
     note.alignment = WD_ALIGN_PARAGRAPH.CENTER
 

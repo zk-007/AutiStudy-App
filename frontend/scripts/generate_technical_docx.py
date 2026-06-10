@@ -69,7 +69,7 @@ def build_backend() -> Document:
     doc.add_paragraph(
         "The AutiStudy backend is a Python stack centered on FastAPI (api_server.py) that exposes "
         "a REST API for the Next.js React frontend. It reuses the same JSON persistence layer and "
-        "AI modules originally built for the Streamlit app, ensuring both UIs stay in sync. "
+        "AI modules shared across REST endpoints; the Next.js frontend is the sole UI. "
         "Core capabilities include JWT-style bearer auth, RAG-grounded tutoring, deterministic "
         "visual-aid routing, quiz generation, analytics, parent dashboards, B-Form OCR signup, "
         "emotion-aware teaching modality, and OpenAI TTS."
@@ -85,21 +85,18 @@ def build_backend() -> Document:
     doc.add_heading("2.1 Repository Layout", 2)
     code_block(
         doc,
-        "AutiStudy/\n"
-        "├── api_server.py          # FastAPI REST API (primary entry for React)\n"
-        "├── app.py                 # Streamlit multi-page app (legacy UI)\n"
-        "├── chat_engine.py         # Bridge: API ↔ RAG/LLM/visual aids\n"
-        "├── quiz_engine.py         # GPT quiz generation\n"
-        "├── requirements.txt\n"
-        "├── Dockerfile             # Streamlit deployment (port 7860)\n"
-        "├── scripts/run_api_detached.py\n"
-        "├── data/                  # JSON persistence\n"
-        "├── quiz_data/             # Per-user quiz attempts\n"
-        "├── OneSharedChromaDB/     # ChromaDB vector store\n"
-        "├── temp_generated_images/ # Cached DALL·E outputs\n"
-        "├── utils/                 # Core modules\n"
-        "└── views/                 # Streamlit pages\n\n"
-        "AutiStudy-React/books_mds/  # Curriculum markdown (sibling repo)",
+        "AutiStudy-App/\n"
+        "├── backend/\n"
+        "│   ├── api_server.py      # FastAPI REST API\n"
+        "│   ├── chat_engine.py     # Bridge: API ↔ RAG/LLM/visual aids\n"
+        "│   ├── config/secrets.toml\n"
+        "│   ├── data/              # JSON persistence\n"
+        "│   ├── OneSharedChromaDB/ # ChromaDB vector store\n"
+        "│   └── utils/             # rag.py, llm.py, media_agent.py, …\n"
+        "└── frontend/\n"
+        "    ├── app/               # Next.js pages\n"
+        "    ├── components/agent/  # Adaptive agent UI\n"
+        "    └── books_mds/         # Curriculum markdown (RAG source)",
     )
     doc.add_heading("2.2 Request Flow", 2)
     bullets(
@@ -291,7 +288,7 @@ def build_backend() -> Document:
 
     # 6. Storage
     doc.add_heading("6. Data Storage (JSON Files)", 1)
-    doc.add_paragraph("No SQL database. Streamlit and FastAPI share the same files.")
+    doc.add_paragraph("No SQL database. FastAPI reads/writes JSON files on disk.")
     table(
         doc,
         ["Store", "Path", "Purpose"],
@@ -530,7 +527,7 @@ def build_backend() -> Document:
     # 14. Books
     doc.add_heading("14. Curriculum Books (books_mds)", 1)
     doc.add_paragraph(
-        "Location: AutiStudy-React/books_mds/ (resolved by utils/book_parser.BOOKS_DIR). "
+        "Location: frontend/books_mds/ (resolved by backend/utils/book_parser.BOOKS_DIR). "
         "Used for quiz chapter selection; RAG uses separate ChromaDB index."
     )
     table(
@@ -618,7 +615,7 @@ def build_backend() -> Document:
             ["chromadb, sentence-transformers", "Vector store + embeddings"],
             ["rank_bm25, numpy", "Sparse retrieval + scores"],
             ["bcrypt", "Password hashing"],
-            ["streamlit, plotly, pandas", "Legacy UI + charts"],
+            ["toml, python-dotenv", "Config / secrets loading"],
             ["Pillow", "Image handling"],
             ["replicate", "Legacy alt image (llm2.py)"],
         ],
@@ -642,7 +639,7 @@ def build_backend() -> Document:
         doc,
         [
             "1. OPENAI_API_KEY environment variable",
-            "2. .streamlit/secrets.toml",
+            "2. backend/config/secrets.toml",
             "3. Plain files: new_imp_fyp_open_ai_key.txt, openai_api_key.txt, OPENAI_API_KEY.txt",
         ],
     )
@@ -655,21 +652,21 @@ def build_backend() -> Document:
         "uvicorn api_server:app --port 8000 --reload\n\n"
         "# From React repo:\n"
         "npm run dev:api\n"
-        "# Runs: uvicorn api_server:app --app-dir ../AutiStudy --port 8000",
+        "# Runs: npm run dev:api  (uvicorn --app-dir ../backend --port 8000)",
     )
     doc.add_paragraph(
         "Windows detached: python scripts/run_api_detached.py (uses pythonw.exe)."
     )
 
-    # 20. Streamlit Legacy
-    doc.add_heading("20. Streamlit Legacy Application", 1)
+    # 20. Monorepo
+    doc.add_heading("20. Monorepo Layout", 1)
     bullets(
         doc,
         [
-            "app.py — multi-page Streamlit router",
-            "views/: landing, login, signup, dashboard, ai_tutor, chat, analytics, practice_quiz, faq, about",
-            "Same JSON files and utils modules as FastAPI",
-            "Dockerfile deploys Streamlit on port 7860 (not FastAPI)",
+            "AutiStudy-App/ — single repository with backend/ (FastAPI) and frontend/ (Next.js)",
+            "No Streamlit UI — Next.js is the sole student-facing interface",
+            "npm run dev:all from frontend/ starts both servers",
+            "Dockerfile runs uvicorn on port 8000",
         ],
     )
 
@@ -698,12 +695,12 @@ def build_backend() -> Document:
     bullets(
         doc,
         [
-            "Dual frontend sync: FastAPI and Streamlit share JSON — no ORM",
+            "JSON-on-disk persistence — no ORM",
             "Subject naming inconsistency: 'Computer' vs 'Computer Science'",
             "RAT disabled in production API for latency",
             "Grade 7 Maths book not in BOOK_MAP",
             "Debug endpoint /api/debug/openai-ping should be removed before production",
-            "Dockerfile deploys Streamlit, not FastAPI — React expects API on port 8000",
+            "ChromaDB path must exist locally or RAG degrades to pure GPT",
         ],
     )
 
@@ -722,9 +719,10 @@ def build_frontend() -> Document:
     # 1. Overview
     doc.add_heading("1. Executive Summary", 1)
     doc.add_paragraph(
-        "AutiStudy-React (package name autistudy-web v0.1.0) is a Next.js 14 App Router "
-        "frontend for an AI-powered adaptive learning platform targeting autistic students "
-        "in Pakistan (grades 4–7). It communicates with a FastAPI backend at http://127.0.0.1:8000 "
+        "AutiStudy-App/frontend (package name autistudy-web v0.1.0) is a Next.js 14 App Router "
+        "frontend — the sole student UI — for an AI-powered adaptive learning platform targeting "
+        "autistic students in Pakistan (grades 4–7). It communicates with backend/ FastAPI at "
+        "http://127.0.0.1:8000 "
         "via a typed fetch client. Features include bilingual EN/Urdu UI, RAG-grounded chat with "
         "11 in-browser visual aid types, quizzes, analytics, parent dashboards, webcam teaching "
         "agent integration, and autism-friendly accessibility settings."
@@ -746,7 +744,7 @@ def build_frontend() -> Document:
             ["Markdown/Math", "react-markdown, KaTeX", "—"],
             ["Icons", "lucide-react", "1.8"],
             ["E2E", "Playwright", "1.59 (dev)"],
-            ["Backend", "FastAPI sibling AutiStudy/", "port 8000"],
+            ["Backend", "FastAPI ../backend/", "port 8000"],
         ],
     )
 
@@ -754,7 +752,7 @@ def build_frontend() -> Document:
     doc.add_heading("3. Project Structure", 1)
     code_block(
         doc,
-        "AutiStudy-React/\n"
+        "AutiStudy-App/frontend/\n"
         "├── app/                    # Next.js App Router pages\n"
         "│   ├── layout.tsx          # Root layout + providers\n"
         "│   ├── page.tsx            # Landing (/)\n"

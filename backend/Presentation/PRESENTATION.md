@@ -27,7 +27,7 @@
 - Practice quizzes with analytics
 - Bilingual interface switching
 
-*[Live demonstration of the Streamlit application]*
+*[Live demonstration of the Next.js + FastAPI application]*
 
 ---
 
@@ -381,8 +381,9 @@ AI: [Generates image showing 2 apples + 4 apples = 6 apples]
 | **PDF Parsing** | LlamaParse (LlamaIndex) | MD conversion |
 | **Image Gen** | DALL-E / GPT-Image | Visual aids |
 | **TTS** | OpenAI TTS | Audio explanations |
-| **Frontend** | Streamlit | Web interface |
-| **Deployment** | Streamlit Cloud | Free hosting |
+| **Frontend** | Next.js 14 / React | Web interface |
+| **Backend API** | FastAPI / Uvicorn | REST services |
+| **Deployment** | Node + Python (local / cloud) | Monorepo `AutiStudy-App` |
 
 ---
 
@@ -398,7 +399,7 @@ AI: [Generates image showing 2 apples + 4 apples = 6 apples]
 | BM25 + Dense | Hybrid catches more | Dense only (misses keywords) |
 | CrossEncoder | High accuracy reranking | Embedding similarity (weak) |
 | LlamaParse | Preserves structure | OCR (destroys math) |
-| Streamlit | Rapid dev, clean UI | React (complex, slow dev) |
+| Next.js + FastAPI | Rich UI + scalable API | Monolithic Streamlit (limited UX) |
 
 **Philosophy:** Best tool for the job, not the most expensive
 
@@ -621,7 +622,7 @@ Final Response:
    ║  AI-Powered Adaptive Learning         ║
    ║  for Students with Autism             ║
    ╠═══════════════════════════════════════╣
-   ║  📱 Live Demo: [Streamlit Cloud URL]  ║
+   ║  📱 Live Demo: localhost:3000 (Next.js)  ║
    ║  💻 GitHub: github.com/zk-007/AutiStudy║
    ╚═══════════════════════════════════════╝
 ```
@@ -638,11 +639,15 @@ Final Response:
 ┌─────────────────────────────────────────────────────────────┐
 │                      AutiStudy Architecture                  │
 ├─────────────────────────────────────────────────────────────┤
-│  User Interface (Streamlit)                                  │
-│  ├── Dashboard                                               │
-│  ├── AI Tutor Chat                                          │
+│  User Interface (Next.js 14 — frontend/)                     │
+│  ├── Dashboard / Landing                                     │
+│  ├── AI Tutor Chat + Adaptive Agent Panel                   │
 │  ├── Practice Quizzes                                       │
-│  └── Learning Analytics                                      │
+│  └── Parent Dashboard & Analytics                           │
+├─────────────────────────────────────────────────────────────┤
+│  REST API (FastAPI — backend/api_server.py)                 │
+│  ├── Auth · Chat · Quiz · Agent · Parent                  │
+│  └── RAG + LLM + Visual aids + TTS                         │
 ├─────────────────────────────────────────────────────────────┤
 │  RAG Pipeline                                                │
 │  ├── Query Processing                                        │

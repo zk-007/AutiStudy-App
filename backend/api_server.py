@@ -8,8 +8,8 @@ React/Next.js frontend.
 
 Key design decisions:
   * Reuses utils/session.py, utils/auth.py, utils/quiz_db.py, utils/chat_db.py
-    so Streamlit and React stay in PERFECT sync (same JSON files on disk).
-  * Bearer-token auth using the same session tokens utils/session.py issues.
+    (JSON files on disk shared with the Next.js frontend).
+  * Bearer-token auth using session tokens from utils/session.py.
   * CORS allows http://localhost:3000 (React dev server).
   * Run from the AutiStudy folder so relative file paths
     (data/users.json, quiz_data/, etc.) resolve correctly:
@@ -56,8 +56,7 @@ from pydantic import BaseModel
 # Ensure utils/ can be imported regardless of how uvicorn is launched
 sys.path.insert(0, str(_ROOT))
 
-# Reuse the EXACT same data utilities Streamlit uses so both frontends
-# read and write the same JSON files.
+# Shared data layer — same JSON stores the React app reads/writes.
 from utils.session import create_session, delete_session, get_session  # noqa: E402
 from utils.auth import (  # noqa: E402
     hash_password, load_users, save_users,

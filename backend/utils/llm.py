@@ -5,10 +5,10 @@ import base64
 import uuid
 from typing import List, Dict, Optional, Any
 
-import streamlit as st
 from openai import OpenAI
 
 from utils.rag import query_knowledge_base, format_context_for_prompt
+from utils.secrets import get_secret
 
 
 # =========================================================
@@ -54,17 +54,10 @@ _OPENAI_TIMEOUT_SECONDS = 60.0
 
 
 def _resolve_api_key() -> str:
-    """Resolve the OpenAI API key from env → secrets.toml → key file."""
-    key = os.getenv("OPENAI_API_KEY", "")
+    """Resolve the OpenAI API key from env → config/secrets.toml → key file."""
+    key = get_secret("OPENAI_API_KEY", "")
     if key:
         return key
-    try:
-        # Outside a Streamlit runtime st.secrets may raise; catch everything.
-        key = st.secrets.get("OPENAI_API_KEY", "") or ""
-        if key:
-            return key
-    except Exception:
-        pass
     return _read_api_key_from_file(OPENAI_API_KEY_FILE) or ""
 
 
@@ -241,9 +234,8 @@ def generate_response(
     extra_system_hint: str = "",
 ) -> str:
     """Generate a response using GPT-4o-mini with optional RAG."""
-    # Get language from session state if not provided
     if language is None:
-        language = st.session_state.get("language", "en")
+        language = "en"
 
     client = get_openai_client()
     if not client:

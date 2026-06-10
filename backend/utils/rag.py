@@ -12,7 +12,6 @@ import numpy as np
 from typing import List, Dict, Optional, Tuple
 from collections import Counter
 
-import streamlit as st
 import chromadb
 
 # Try to import required libraries

@@ -13,7 +13,7 @@ AutiStudy-App/
 
 - Node.js 18+ and npm
 - Python 3.11+
-- An OpenAI API key in `backend/.streamlit/secrets.toml` (`OPENAI_API_KEY = "..."`)
+- An OpenAI API key in `backend/config/secrets.toml` (`OPENAI_API_KEY = "..."`)
 
 ## Setup
 

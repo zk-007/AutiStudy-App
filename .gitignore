@@ -13,6 +13,7 @@ __pycache__/
 venv/
 
 # ── Secrets ───────────────────────────────────────────────────────────────────
+backend/config/secrets.toml
 backend/.streamlit/secrets.toml
 *.env
 .env

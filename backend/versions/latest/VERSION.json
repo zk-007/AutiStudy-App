@@ -1,7 +1,0 @@
-﻿{
-    "label":  "v4.1-adaptive-agent",
-    "git_commit":  "8c4cb36",
-    "saved_at":  "2026-06-01",
-    "tag":  "latest",
-    "notes":  "FastAPI backend with agent generate-content, step-mcqs (teaching/appreciation), RAG/LLM updates"
-}

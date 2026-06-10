@@ -1,0 +1,114 @@
+{
+  "description": "Gold-labeled situations for the ReAct teaching agent (utils/media_agent.decide_from_emotion). Labels follow the agent's own documented decision ladder: happy->do_nothing; 1st confusion->simplify/analogy; 2nd->visual; persistent->steps; frustrated+3 with a real prerequisite gap->check_prerequisite; last resort after 2+ tools->notify_parent; tired/heavy-reading->speak_aloud. 'expected_primary' is the single best route; 'accepted' is the set of defensible routes used for lenient accuracy.",
+  "tools": ["do_nothing", "simplify_text", "generate_visual", "speak_aloud", "explain_steps", "use_analogy", "check_prerequisite", "notify_parent"],
+  "scenarios": [
+    {
+      "id": "happy_focused",
+      "emotion": "happy", "confidence": 0.92, "understood": true,
+      "description": "smiling and nodding, looks engaged",
+      "consecutive_confused": 0, "tools_used_this_session": [],
+      "subject": "Maths", "grade": 4,
+      "last_question": "What is 5 + 3?",
+      "expected_primary": "do_nothing", "accepted": ["do_nothing"]
+    },
+    {
+      "id": "neutral_understood",
+      "emotion": "neutral", "confidence": 0.85, "understood": true,
+      "description": "calm, attentive, following along",
+      "consecutive_confused": 0, "tools_used_this_session": [],
+      "subject": "General Science", "grade": 5,
+      "last_question": "What is the water cycle?",
+      "expected_primary": "do_nothing", "accepted": ["do_nothing"]
+    },
+    {
+      "id": "first_confusion_abstract",
+      "emotion": "confused", "confidence": 0.8, "understood": false,
+      "description": "furrowed brow, looks puzzled after the answer",
+      "consecutive_confused": 1, "tools_used_this_session": [],
+      "subject": "Maths", "grade": 5,
+      "last_question": "What is a fraction?",
+      "expected_primary": "simplify_text", "accepted": ["simplify_text", "use_analogy"]
+    },
+    {
+      "id": "first_confusion_concept",
+      "emotion": "confused", "confidence": 0.78, "understood": false,
+      "description": "head tilted, slightly lost",
+      "consecutive_confused": 1, "tools_used_this_session": [],
+      "subject": "General Science", "grade": 6,
+      "last_question": "What is gravity?",
+      "expected_primary": "use_analogy", "accepted": ["simplify_text", "use_analogy"]
+    },
+    {
+      "id": "second_confusion_visual",
+      "emotion": "confused", "confidence": 0.82, "understood": false,
+      "description": "still confused after a simpler explanation",
+      "consecutive_confused": 2, "tools_used_this_session": ["simplify_text"],
+      "subject": "Maths", "grade": 5,
+      "last_question": "How do I add 1/2 and 1/4?",
+      "expected_primary": "generate_visual", "accepted": ["generate_visual", "explain_steps"]
+    },
+    {
+      "id": "second_confusion_shapes",
+      "emotion": "confused", "confidence": 0.8, "understood": false,
+      "description": "not getting it after a re-explanation",
+      "consecutive_confused": 2, "tools_used_this_session": ["use_analogy"],
+      "subject": "Maths", "grade": 4,
+      "last_question": "What is the area of a triangle?",
+      "expected_primary": "generate_visual", "accepted": ["generate_visual", "explain_steps"]
+    },
+    {
+      "id": "persistent_process",
+      "emotion": "confused", "confidence": 0.84, "understood": false,
+      "description": "lost on the procedure even after a picture",
+      "consecutive_confused": 3, "tools_used_this_session": ["simplify_text", "generate_visual"],
+      "subject": "Maths", "grade": 6,
+      "last_question": "How do I do long division of 84 by 7?",
+      "expected_primary": "explain_steps", "accepted": ["explain_steps"]
+    },
+    {
+      "id": "persistent_method",
+      "emotion": "confused", "confidence": 0.8, "understood": false,
+      "description": "still struggling with the steps of the method",
+      "consecutive_confused": 3, "tools_used_this_session": ["use_analogy", "generate_visual"],
+      "subject": "General Science", "grade": 6,
+      "last_question": "What are the steps of the scientific method?",
+      "expected_primary": "explain_steps", "accepted": ["explain_steps"]
+    },
+    {
+      "id": "tired_heavy_reading",
+      "emotion": "tired", "confidence": 0.75, "understood": false,
+      "description": "rubbing eyes, has been reading a long text answer",
+      "consecutive_confused": 1, "tools_used_this_session": [],
+      "subject": "General Science", "grade": 5,
+      "last_question": "Can you explain the parts of a plant?",
+      "expected_primary": "speak_aloud", "accepted": ["speak_aloud", "simplify_text"]
+    },
+    {
+      "id": "frustrated_prereq_gap",
+      "emotion": "frustrated", "confidence": 0.86, "understood": false,
+      "description": "clearly frustrated, seems to be missing a basic idea",
+      "consecutive_confused": 3, "tools_used_this_session": ["simplify_text", "use_analogy", "generate_visual"],
+      "subject": "Maths", "grade": 6,
+      "last_question": "How do I divide fractions?",
+      "expected_primary": "check_prerequisite", "accepted": ["check_prerequisite", "explain_steps"]
+    },
+    {
+      "id": "last_resort_stuck",
+      "emotion": "frustrated", "confidence": 0.9, "understood": false,
+      "description": "very upset, nothing has helped, looks like giving up",
+      "consecutive_confused": 5, "tools_used_this_session": ["simplify_text", "generate_visual", "explain_steps", "use_analogy"],
+      "subject": "Maths", "grade": 6,
+      "last_question": "I still don't understand long division at all.",
+      "expected_primary": "notify_parent", "accepted": ["notify_parent", "check_prerequisite"]
+    },
+    {
+      "id": "happy_after_help",
+      "emotion": "happy", "confidence": 0.88, "understood": true,
+      "description": "smiling, says it makes sense now",
+      "consecutive_confused": 0, "tools_used_this_session": ["simplify_text"],
+      "subject": "Maths", "grade": 4,
+      "last_question": "Oh I get it now, thanks!",
+      "expected_primary": "do_nothing", "accepted": ["do_nothing"]
+    }
+  ]
+}

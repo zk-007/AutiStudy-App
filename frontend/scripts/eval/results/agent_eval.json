@@ -1,0 +1,424 @@
+{
+  "system_under_test": "utils.media_agent (GPT-4o ReAct tool router)",
+  "model": "gpt-4o",
+  "temperature": 0.2,
+  "n_scenarios": 12,
+  "k_repeats": 5,
+  "total_model_calls": 60,
+  "elapsed_seconds": 74.1,
+  "routing_accuracy": {
+    "strict_primary": 0.9166666666666666,
+    "lenient_accepted_set": 1.0,
+    "macro": {
+      "precision": 0.8125,
+      "recall": 0.875,
+      "f1": 0.8333333333333333
+    },
+    "weighted": {
+      "precision": 0.875,
+      "recall": 0.9166666666666666,
+      "f1": 0.8888888888888888
+    },
+    "per_class": {
+      "check_prerequisite": {
+        "precision": 0.5,
+        "recall": 1.0,
+        "f1": 0.6666666666666666,
+        "support": 1
+      },
+      "do_nothing": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0,
+        "support": 3
+      },
+      "explain_steps": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0,
+        "support": 2
+      },
+      "generate_visual": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0,
+        "support": 2
+      },
+      "notify_parent": {
+        "precision": 0.0,
+        "recall": 0.0,
+        "f1": 0.0,
+        "support": 1
+      },
+      "simplify_text": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0,
+        "support": 1
+      },
+      "speak_aloud": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0,
+        "support": 1
+      },
+      "use_analogy": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0,
+        "support": 1
+      }
+    },
+    "confusion_matrix": {
+      "labels": [
+        "check_prerequisite",
+        "do_nothing",
+        "explain_steps",
+        "generate_visual",
+        "notify_parent",
+        "simplify_text",
+        "speak_aloud",
+        "use_analogy"
+      ],
+      "matrix": [
+        [
+          1,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          3,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          2,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0,
+          2,
+          0,
+          0,
+          0,
+          0
+        ],
+        [
+          1,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0,
+          0,
+          0,
+          1,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          1,
+          0
+        ],
+        [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          1
+        ]
+      ]
+    }
+  },
+  "response_consistency": {
+    "n_items": 12,
+    "k_repeats": 5,
+    "mean_majority_agreement": 1.0,
+    "all_agree_rate": 1.0,
+    "mean_entropy": 0.0,
+    "fleiss_kappa": 1.0
+  },
+  "per_scenario": [
+    {
+      "id": "happy_focused",
+      "expected_primary": "do_nothing",
+      "accepted": [
+        "do_nothing"
+      ],
+      "runs": [
+        "do_nothing",
+        "do_nothing",
+        "do_nothing",
+        "do_nothing",
+        "do_nothing"
+      ],
+      "majority_choice": "do_nothing",
+      "majority_agreement": 1.0,
+      "all_agree": true,
+      "entropy": -0.0,
+      "correct_strict": true,
+      "correct_lenient": true
+    },
+    {
+      "id": "neutral_understood",
+      "expected_primary": "do_nothing",
+      "accepted": [
+        "do_nothing"
+      ],
+      "runs": [
+        "do_nothing",
+        "do_nothing",
+        "do_nothing",
+        "do_nothing",
+        "do_nothing"
+      ],
+      "majority_choice": "do_nothing",
+      "majority_agreement": 1.0,
+      "all_agree": true,
+      "entropy": -0.0,
+      "correct_strict": true,
+      "correct_lenient": true
+    },
+    {
+      "id": "first_confusion_abstract",
+      "expected_primary": "simplify_text",
+      "accepted": [
+        "simplify_text",
+        "use_analogy"
+      ],
+      "runs": [
+        "simplify_text",
+        "simplify_text",
+        "simplify_text",
+        "simplify_text",
+        "simplify_text"
+      ],
+      "majority_choice": "simplify_text",
+      "majority_agreement": 1.0,
+      "all_agree": true,
+      "entropy": -0.0,
+      "correct_strict": true,
+      "correct_lenient": true
+    },
+    {
+      "id": "first_confusion_concept",
+      "expected_primary": "use_analogy",
+      "accepted": [
+        "simplify_text",
+        "use_analogy"
+      ],
+      "runs": [
+        "use_analogy",
+        "use_analogy",
+        "use_analogy",
+        "use_analogy",
+        "use_analogy"
+      ],
+      "majority_choice": "use_analogy",
+      "majority_agreement": 1.0,
+      "all_agree": true,
+      "entropy": -0.0,
+      "correct_strict": true,
+      "correct_lenient": true
+    },
+    {
+      "id": "second_confusion_visual",
+      "expected_primary": "generate_visual",
+      "accepted": [
+        "generate_visual",
+        "explain_steps"
+      ],
+      "runs": [
+        "generate_visual",
+        "generate_visual",
+        "generate_visual",
+        "generate_visual",
+        "generate_visual"
+      ],
+      "majority_choice": "generate_visual",
+      "majority_agreement": 1.0,
+      "all_agree": true,
+      "entropy": -0.0,
+      "correct_strict": true,
+      "correct_lenient": true
+    },
+    {
+      "id": "second_confusion_shapes",
+      "expected_primary": "generate_visual",
+      "accepted": [
+        "generate_visual",
+        "explain_steps"
+      ],
+      "runs": [
+        "generate_visual",
+        "generate_visual",
+        "generate_visual",
+        "generate_visual",
+        "generate_visual"
+      ],
+      "majority_choice": "generate_visual",
+      "majority_agreement": 1.0,
+      "all_agree": true,
+      "entropy": -0.0,
+      "correct_strict": true,
+      "correct_lenient": true
+    },
+    {
+      "id": "persistent_process",
+      "expected_primary": "explain_steps",
+      "accepted": [
+        "explain_steps"
+      ],
+      "runs": [
+        "explain_steps",
+        "explain_steps",
+        "explain_steps",
+        "explain_steps",
+        "explain_steps"
+      ],
+      "majority_choice": "explain_steps",
+      "majority_agreement": 1.0,
+      "all_agree": true,
+      "entropy": -0.0,
+      "correct_strict": true,
+      "correct_lenient": true
+    },
+    {
+      "id": "persistent_method",
+      "expected_primary": "explain_steps",
+      "accepted": [
+        "explain_steps"
+      ],
+      "runs": [
+        "explain_steps",
+        "explain_steps",
+        "explain_steps",
+        "explain_steps",
+        "explain_steps"
+      ],
+      "majority_choice": "explain_steps",
+      "majority_agreement": 1.0,
+      "all_agree": true,
+      "entropy": -0.0,
+      "correct_strict": true,
+      "correct_lenient": true
+    },
+    {
+      "id": "tired_heavy_reading",
+      "expected_primary": "speak_aloud",
+      "accepted": [
+        "speak_aloud",
+        "simplify_text"
+      ],
+      "runs": [
+        "speak_aloud",
+        "speak_aloud",
+        "speak_aloud",
+        "speak_aloud",
+        "speak_aloud"
+      ],
+      "majority_choice": "speak_aloud",
+      "majority_agreement": 1.0,
+      "all_agree": true,
+      "entropy": -0.0,
+      "correct_strict": true,
+      "correct_lenient": true
+    },
+    {
+      "id": "frustrated_prereq_gap",
+      "expected_primary": "check_prerequisite",
+      "accepted": [
+        "check_prerequisite",
+        "explain_steps"
+      ],
+      "runs": [
+        "check_prerequisite",
+        "check_prerequisite",
+        "check_prerequisite",
+        "check_prerequisite",
+        "check_prerequisite"
+      ],
+      "majority_choice": "check_prerequisite",
+      "majority_agreement": 1.0,
+      "all_agree": true,
+      "entropy": -0.0,
+      "correct_strict": true,
+      "correct_lenient": true
+    },
+    {
+      "id": "last_resort_stuck",
+      "expected_primary": "notify_parent",
+      "accepted": [
+        "notify_parent",
+        "check_prerequisite"
+      ],
+      "runs": [
+        "check_prerequisite",
+        "check_prerequisite",
+        "check_prerequisite",
+        "check_prerequisite",
+        "check_prerequisite"
+      ],
+      "majority_choice": "check_prerequisite",
+      "majority_agreement": 1.0,
+      "all_agree": true,
+      "entropy": -0.0,
+      "correct_strict": false,
+      "correct_lenient": true
+    },
+    {
+      "id": "happy_after_help",
+      "expected_primary": "do_nothing",
+      "accepted": [
+        "do_nothing"
+      ],
+      "runs": [
+        "do_nothing",
+        "do_nothing",
+        "do_nothing",
+        "do_nothing",
+        "do_nothing"
+      ],
+      "majority_choice": "do_nothing",
+      "majority_agreement": 1.0,
+      "all_agree": true,
+      "entropy": -0.0,
+      "correct_strict": true,
+      "correct_lenient": true
+    }
+  ]
+}

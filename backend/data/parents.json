@@ -1,0 +1,11 @@
+{
+  "sikandar@gmail.com": {
+    "email": "sikandar@gmail.com",
+    "name": "Sikandar Hayat",
+    "password": "$2b$12$jF8bkYEfuZBYkI1Ar6ahoewk/TWaX3c3.zpdlb.vOJ7EWRMXjb3V2",
+    "cnic": "34302-1202978-7",
+    "child_email": "bhatti@gmail.com",
+    "verified": true,
+    "role": "parent"
+  }
+}

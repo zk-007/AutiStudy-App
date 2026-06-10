@@ -1,0 +1,271 @@
+{
+  "system_under_test": "utils.visual_aids.classify_visual_request",
+  "router_type": "deterministic (regex, no LLM)",
+  "n_items": 60,
+  "routing_accuracy": 0.9333333333333333,
+  "macro": {
+    "precision": 0.9545454545454546,
+    "recall": 0.942857142857143,
+    "f1": 0.9386593204775022
+  },
+  "weighted": {
+    "precision": 0.9527777777777777,
+    "recall": 0.9333333333333333,
+    "f1": 0.9313468013468015
+  },
+  "per_class": {
+    "bar_chart": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0,
+      "support": 5
+    },
+    "concept": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0,
+      "support": 6
+    },
+    "countable": {
+      "precision": 0.6666666666666666,
+      "recall": 1.0,
+      "f1": 0.8,
+      "support": 6
+    },
+    "factor_tree": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0,
+      "support": 6
+    },
+    "fraction_bar": {
+      "precision": 1.0,
+      "recall": 0.8,
+      "f1": 0.888888888888889,
+      "support": 5
+    },
+    "geometry": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0,
+      "support": 5
+    },
+    "number_line": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0,
+      "support": 5
+    },
+    "percentage_bar": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0,
+      "support": 5
+    },
+    "ratio": {
+      "precision": 0.8333333333333334,
+      "recall": 1.0,
+      "f1": 0.9090909090909091,
+      "support": 5
+    },
+    "symbolic": {
+      "precision": 1.0,
+      "recall": 0.5714285714285714,
+      "f1": 0.7272727272727273,
+      "support": 7
+    },
+    "times_table": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0,
+      "support": 5
+    }
+  },
+  "confusion_matrix": {
+    "labels": [
+      "bar_chart",
+      "concept",
+      "countable",
+      "factor_tree",
+      "fraction_bar",
+      "geometry",
+      "number_line",
+      "percentage_bar",
+      "ratio",
+      "symbolic",
+      "times_table"
+    ],
+    "matrix": [
+      [
+        5,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        6,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        6,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        6,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        4,
+        0,
+        0,
+        0,
+        1,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        5,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        5,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        5,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        5,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        3,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        4,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        5
+      ]
+    ]
+  },
+  "response_consistency": {
+    "note": "Router is deterministic; identical input -> identical route.",
+    "verified_identical_on_repeat": true,
+    "agreement_rate": 1.0
+  },
+  "failures": [
+    {
+      "question": "Illustrate the fraction 3/8.",
+      "expected": "fraction_bar",
+      "predicted": "ratio"
+    },
+    {
+      "question": "What is 2/4 + 5/6?",
+      "expected": "symbolic",
+      "predicted": "countable"
+    },
+    {
+      "question": "Solve 1/2 + 1/4.",
+      "expected": "symbolic",
+      "predicted": "countable"
+    },
+    {
+      "question": "What is 0.5 + 0.25?",
+      "expected": "symbolic",
+      "predicted": "countable"
+    }
+  ]
+}

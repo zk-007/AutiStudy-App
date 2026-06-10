@@ -56,7 +56,9 @@ def _ensure_api_key() -> bool:
 
     if os.getenv("OPENAI_API_KEY"):
         return True
-    secrets_path = BACKEND_ROOT / ".streamlit" / "secrets.toml"
+    secrets_path = BACKEND_ROOT / "config" / "secrets.toml"
+    if not secrets_path.exists():
+        secrets_path = BACKEND_ROOT / ".streamlit" / "secrets.toml"
     if secrets_path.exists():
         try:
             import toml
@@ -141,7 +143,7 @@ def main() -> None:
         return
 
     if not _ensure_api_key():
-        print("ERROR: no OPENAI_API_KEY found (env or ../AutiStudy/.streamlit/secrets.toml).")
+        print("ERROR: no OPENAI_API_KEY found (env or backend/config/secrets.toml).")
         sys.exit(1)
 
     from utils.media_agent import _get_client

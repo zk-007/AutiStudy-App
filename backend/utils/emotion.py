@@ -23,15 +23,8 @@ _client: OpenAI | None = None
 def _get_client() -> OpenAI:
     global _client
     if _client is None:
-        api_key = os.getenv("OPENAI_API_KEY")
-        if not api_key:
-            # Try reading from secrets.toml (Streamlit convention)
-            try:
-                import toml
-                secrets = toml.load(".streamlit/secrets.toml")
-                api_key = secrets.get("OPENAI_API_KEY", "")
-            except Exception:
-                pass
+        from utils.secrets import get_secret
+        api_key = get_secret("OPENAI_API_KEY", "")
         _client = OpenAI(api_key=api_key)
     return _client
 

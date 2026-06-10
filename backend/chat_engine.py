@@ -3,10 +3,8 @@ Chat engine for the AutiStudy REST API (RAG-powered).
 ============================================================
 
 This module is the bridge between the FastAPI server and the existing
-RAG + LLM pipeline (`utils/llm.py` + `utils/rag.py`). The Streamlit app
-calls those modules directly via Streamlit session state; this bridge
-mirrors the same behaviour without requiring a Streamlit runtime, so the
-React frontend gets *exactly* the same curriculum-grounded tutor:
+RAG + LLM pipeline (`utils/llm.py` + `utils/rag.py`). The React/Next.js
+frontend calls the API; this bridge serves the same curriculum-grounded tutor:
 
   * hybrid retrieval (dense + BM25) over `OneSharedChromaDB / ptb_textbooks`
   * cross-encoder reranking
@@ -41,10 +39,12 @@ _HERE = Path(__file__).parent.resolve()
 
 # Sources to check for the OpenAI key, in priority order:
 #   1. OPENAI_API_KEY env var
-#   2. .streamlit/secrets.toml  (single source of truth shared with Streamlit)
+#   2. config/secrets.toml  (or legacy .streamlit/secrets.toml)
 #   3. Loose plain-text key files dropped next to the project root.
-_SECRETS_TOML = _HERE / ".streamlit" / "secrets.toml"
+from utils.secrets import secrets_toml_paths  # noqa: E402
+
 _PLAIN_KEY_FILES = [
+    _HERE / "config" / "new_imp_fyp_open_ai_key.txt",
     _HERE / ".streamlit" / "new_imp_fyp_open_ai_key.txt",
     _HERE / "openai_api_key.txt",
     _HERE / "OPENAI_API_KEY.txt",
@@ -62,21 +62,28 @@ _CHROMA_PATH = _HERE / "OneSharedChromaDB"
 # ────────────────────────────────────────────────────────────────────────────
 
 def _load_from_secrets_toml() -> Optional[str]:
-    """Read OPENAI_API_KEY from .streamlit/secrets.toml (if present)."""
-    if not _SECRETS_TOML.exists():
-        return None
-    try:
+    """Read OPENAI_API_KEY from config/secrets.toml (if present)."""
+    from utils.secrets import get_secret
+
+    candidate = get_secret("OPENAI_API_KEY", "")
+    if candidate:
+        return candidate
+    # Legacy nested openai.api_key shape
+    for path in secrets_toml_paths():
+        if not path.exists():
+            continue
         try:
-            import tomllib  # type: ignore[import-not-found]
-        except ModuleNotFoundError:  # Python 3.10 and below
-            import tomli as tomllib  # type: ignore[import-not-found, no-redef]
-        with _SECRETS_TOML.open("rb") as f:
-            data = tomllib.load(f)
-        candidate = data.get("OPENAI_API_KEY") or (data.get("openai") or {}).get("api_key")
-        if isinstance(candidate, str) and candidate.strip():
-            return candidate.strip()
-    except Exception as err:
-        print(f"[chat_engine] Could not read secrets.toml: {err}")
+            try:
+                import tomllib  # type: ignore[import-not-found]
+            except ModuleNotFoundError:
+                import tomli as tomllib  # type: ignore[import-not-found, no-redef]
+            with path.open("rb") as f:
+                data = tomllib.load(f)
+            nested = (data.get("openai") or {}).get("api_key")
+            if isinstance(nested, str) and nested.strip():
+                return nested.strip()
+        except Exception as err:
+            print(f"[chat_engine] Could not read {path}: {err}")
     return None
 
 

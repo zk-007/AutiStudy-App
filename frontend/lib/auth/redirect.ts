@@ -6,8 +6,7 @@
  * Before this helper, any guarded page (e.g. `/chat?session=abc123`) that
  * detected a missing token would do `router.replace("/login")`, throwing
  * away the original `?session=...` query. After login the user landed on
- * `/dashboard` and their conversation appeared "not to reload" — they had
- * to navigate back manually with the URL still in their head.
+ * `/dashboard` instead of the chat they had open.
  *
  * The pattern here is the standard "next" / "return URL" pattern:
  *   1. Guard pages call `loginUrlFor(currentPath)` to build
@@ -53,4 +52,35 @@ export function safeNext(raw: string | null | undefined, fallback = "/dashboard"
   if (!raw.startsWith("/")) return fallback;
   if (raw.startsWith("//")) return fallback;
   return raw;
+}
+
+const RETURN_URL_KEY = "autistudy_return_url";
+
+/** Remember where the student was before auth forced a login redirect. */
+export function saveReturnUrl(path: string) {
+  if (typeof window === "undefined") return;
+  if (!path || path === "/" || path.startsWith("/login") || path.startsWith("/signup")) return;
+  if (!path.startsWith("/") || path.startsWith("//")) return;
+  window.localStorage.setItem(RETURN_URL_KEY, path);
+}
+
+export function getReturnUrl(): string | null {
+  if (typeof window === "undefined") return null;
+  const raw = window.localStorage.getItem(RETURN_URL_KEY);
+  if (!raw || !raw.startsWith("/") || raw.startsWith("//")) return null;
+  return raw;
+}
+
+/** Resolve post-login destination: ?next= param, then saved URL, then dashboard. */
+export function resolveReturnUrl(nextParam: string | null | undefined): string {
+  const fromQuery = nextParam ? safeNext(nextParam, "") : "";
+  if (fromQuery) return fromQuery;
+  const saved = getReturnUrl();
+  if (saved) return saved;
+  return "/dashboard";
+}
+
+export function clearReturnUrl() {
+  if (typeof window === "undefined") return;
+  window.localStorage.removeItem(RETURN_URL_KEY);
 }

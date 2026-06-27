@@ -59,7 +59,15 @@ def create_chat_session(user_email: str, grade: int, subject: str, language: str
     
     return chat_id
 
-def save_message(user_email: str, chat_id: str, role: str, content: str, image_url: str = None, audio_base64: str = None):
+def save_message(
+    user_email: str,
+    chat_id: str,
+    role: str,
+    content: str,
+    image_url: str = None,
+    audio_base64: str = None,
+    skip_tutor: bool = False,
+):
     """Save a message to a chat session with optional image and audio"""
     chats = load_chats()
     
@@ -79,8 +87,11 @@ def save_message(user_email: str, chat_id: str, role: str, content: str, image_u
             # Add audio base64 if provided
             if audio_base64:
                 message["audio_base64"] = audio_base64
-            
+            if skip_tutor:
+                message["skip_tutor"] = True
+
             session["messages"].append(message)
+            session["timestamp"] = datetime.now().isoformat()
             # Update title based on first user message
             if role == "user" and len([m for m in session["messages"] if m["role"] == "user"]) == 1:
                 session["title"] = content[:30] + ("..." if len(content) > 30 else "")

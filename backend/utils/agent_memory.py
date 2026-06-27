@@ -54,6 +54,8 @@ def _default_memory(email: str) -> dict:
             "text_image_voice": 0,
             "step_by_step": 0,
         },
+        # Per-subject adaptation ladder wins (popup Yes / happy CV after a help step)
+        "adaptation_success": {},  # {"Maths": {"read_aloud": 3, "step_by_step": 1}}
         # Overall stats
         "total_sessions": 0,
         "total_confused_events": 0,
@@ -85,6 +87,87 @@ def save_memory(email: str, memory: dict) -> None:
     memory["updated_at"] = datetime.now().isoformat()
     with open(path, "w", encoding="utf-8") as f:
         json.dump(memory, f, indent=2, ensure_ascii=False)
+
+
+# ── Personalized adaptation ladder (comprehension popup flow) ─────────────────
+
+DEFAULT_LADDER_ORDER = [1, 2, 3, 4, 5]
+
+ADAPTATION_TO_ROUND: dict[str, int] = {
+    "step_by_step": 1,
+    "read_aloud": 2,
+    "image": 3,
+    "mcq_recall": 4,
+    "breathing": 5,
+}
+
+
+def record_adaptation_preference(
+    email: str,
+    subject: str,
+    adaptation: str,
+    *,
+    via: str = "popup_yes",
+    happy_cv: bool = False,
+) -> None:
+    """Remember which help step worked when the student confirmed understanding."""
+    if adaptation not in ADAPTATION_TO_ROUND:
+        return
+
+    memory = load_memory(email)
+    memory.setdefault("adaptation_success", {})
+    memory["adaptation_success"].setdefault(subject, {})
+    bucket = memory["adaptation_success"][subject]
+    bucket[adaptation] = bucket.get(adaptation, 0) + 1
+
+    mod_key = {
+        "step_by_step": "step_by_step",
+        "read_aloud": "text_image_voice",
+        "image": "text_image",
+    }.get(adaptation)
+    if mod_key and mod_key in memory["modality_success"]:
+        memory["modality_success"][mod_key] += 1
+
+    memory.setdefault("adaptation_meta", {})
+    memory["adaptation_meta"][subject] = {
+        "last_adaptation": adaptation,
+        "last_via": via,
+        "last_happy_cv": happy_cv,
+        "last_at": datetime.now().isoformat(),
+    }
+
+    save_memory(email, memory)
+
+
+def get_adaptation_ladder_order(email: str, subject: str) -> list[int]:
+    """
+    Return help-ladder round order for this student + subject.
+    Most successful adaptation is tried first on the next confused question.
+    """
+    memory = load_memory(email)
+    successes: dict = memory.get("adaptation_success", {}).get(subject, {})
+    if not successes:
+        return list(DEFAULT_LADDER_ORDER)
+
+    best_adaptation = max(successes, key=lambda k: successes[k])
+    if successes[best_adaptation] < 1:
+        return list(DEFAULT_LADDER_ORDER)
+
+    preferred_round = ADAPTATION_TO_ROUND.get(best_adaptation)
+    if preferred_round is None:
+        return list(DEFAULT_LADDER_ORDER)
+
+    return [preferred_round] + [
+        r for r in DEFAULT_LADDER_ORDER if r != preferred_round
+    ]
+
+
+def get_preferred_adaptation(email: str, subject: str) -> str | None:
+    memory = load_memory(email)
+    successes: dict = memory.get("adaptation_success", {}).get(subject, {})
+    if not successes:
+        return None
+    return max(successes, key=lambda k: successes[k])
 
 
 def record_tool_outcome(
@@ -210,6 +293,15 @@ def get_memory_context(email: str, subject: str) -> str:
         rate = int(resolved / total * 100)
         lines.append(f"Overall confusion resolution rate: {rate}% ({resolved}/{total})")
 
+    # Preferred adaptation for this subject (comprehension ladder)
+    pref = get_preferred_adaptation(email, subject)
+    if pref:
+        count = memory.get("adaptation_success", {}).get(subject, {}).get(pref, 0)
+        lines.append(
+            f"Preferred help style in {subject}: {pref.replace('_', ' ')} "
+            f"(worked {count}x) — try this first when they need extra help"
+        )
+
     if not lines:
         return "No memory yet — this is the student's first session."
 
@@ -229,6 +321,7 @@ def get_memory_summary(email: str) -> dict[str, Any]:
         "struggling_topics": memory["struggling_topics"][-5:],
         "mastered_topics": memory["mastered_topics"][-5:],
         "modality_success": memory["modality_success"],
+        "adaptation_success": memory.get("adaptation_success", {}),
         "best_modality": max(memory["modality_success"], key=memory["modality_success"].get)
         if any(memory["modality_success"].values()) else "text",
         "recent_sessions": memory["recent_sessions"][-3:],

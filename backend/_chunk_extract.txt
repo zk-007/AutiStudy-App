@@ -1,0 +1,145 @@
+﻿FILE: Retriever_logic/Merged__science_gs4.ipynb
+FUNC: clean_md
+# =========================
+# CELL 6 ΓÇö MD Cleaning Utilities (tablesΓåÆtext, strip HTML, remove URLs)
+# =========================
+import re, html
+
+url_re = re.compile(r"https?://\S+|www\.\S+", re.IGNORECASE)
+
+def _strip_tags(s: str) -> str:
+    s = re.sub(r"<[^>]+>", " ", s)      # remove HTML tags
+    s = html.unescape(s)                # decode entities
+    s = re.sub(r"[ \t]+", " ", s)
+    return s.strip()
+
+def _table_to_text(table_html: str) -> str:
+    rows = re.findall(r"<tr[^>]*>(.*?)</tr>", table_html, flags=re.I | re.S)
+    out = []
+    for r in rows:
+        tds = re.findall(r"<td[^>]*>(.*?)</td>", r, flags=re.I | re.S)
+        tds = [_strip_tags(x) for x in tds]
+        tds = [x for x in tds if x]
+        if tds:
+            out.append(" | ".join(tds))
+    return "\n".join(out).strip()
+
+def clean_md_blob(text: str) -> str:
+    t = (text or "").replace("\r\n", "\n").replace("\r", "\n")
+
+    # convert tables first so we keep the cell text
+    t = re.sub(r"<table[^>]*>.*?</table>", lambda m: "\n" + _table_to_text(m.group(0)) + "\n", t, flags=re.I | re.S)
+
+    # strip remaining tags
+    t = _strip_tags(t)
+
+    # normalize image captions produced by parser
+    t = re.sub(r"\[\s*The image shows\s*(.*?)\s*\]", r"IMAGE: \1", t, flags=re.I)
+
+    # remove URLs (textbook-only)
+    t = url_re.sub("", t)
+
+    # normalize whitespace
+    t = re.sub(r"\n{3,}", "\n\n", t)
+    t = re.sub(r"[ \t]+", " ", t)
+    t = t.strip()
+    return t
+
+print("Γ£à Cleaning utilities ready")
+
+
+################################################################################
+
+FILE: Retriever_logic/Merged__science_gs4.ipynb
+FUNC: detect_block_type
+# =========================
+# CELL 8 ΓÇö Block Type Classifier (SLO / EXERCISE / WEBLINKS / GLOSSARY / KEY_POINTS / BODY)
+# =========================
+def detect_block_type(h1, h2, h3, text: str) -> str:
+    H = " ".join([str(h1 or ""), str(h2 or ""), str(h3 or "")]).lower()
+    t = (text or "").lower()
+
+    # strongest signals
+    if "students" in H and "learning outcomes" in H:
+        return "SLO"
+    if "exercise" in H or "exercises" in H:
+        return "EXERCISE"
+    if "weblink" in H or "weblinks" in H or "web link" in H:
+        return "WEBLINKS"
+    if "glossary" in H:
+        return "GLOSSARY"
+    if "key points" in H:
+        return "KEY_POINTS"
+
+    # content signals
+    if t.startswith("after studying this chapter"):
+        return "SLO"
+    if "tick" in t and "correct answer" in t:
+        return "EXERCISE"
+    if t.count("|") >= 4 and len(t.split()) < 80:
+        return "WEBLINKS"
+    if t.startswith("glossary"):
+        return "GLOSSARY"
+
+    return "BODY"
+
+print("Γ£à Block type classifier ready")
+
+
+################################################################################
+
+FILE: Retriever_logic/Final_math_grade4 (1).ipynb
+FUNC: classify_pedagogy
+# 11 ΓÇö Pedagogy Classifier
+def classify_pedagogy(title):
+    t=title.lower()
+    if "try yourself" in t: return "practice"
+    if "try it" in t or "challenge" in t: return "challenge"
+    if "key fact" in t: return "rule"
+    if "exercise" in t: return "assessment"
+    if "vocabulary" in t: return "glossary"
+    if "i have learnt" in t: return "learning_outcomes"
+    return "explanation"
+
+
+
+print(classify_pedagogy("Try Yourself"))
+print(classify_pedagogy("Exercise 2"))
+print(classify_pedagogy("Key Fact"))
+
+
+################################################################################
+
+FILE: Retriever_logic/Final_math_grade4 (1).ipynb
+FUNC: split_questions
+#CELL 12 ΓÇö Question Splitter
+QUESTION_RE = re.compile(r'\n\s*(\d+\.|\([a-z]\))')
+
+def split_questions(text):
+    parts = QUESTION_RE.split(text)
+    questions = []
+
+    for i in range(1, len(parts), 2):
+        qid = parts[i].strip()
+        body = parts[i+1].strip()
+
+        questions.append({
+            "question_id": qid,
+            "text": body
+        })
+
+    return questions
+
+
+sample = """
+1. What is 5+5?
+2. Find value of 9├ù2.
+(a) Easy
+(b) Hard
+"""
+
+print(split_questions(sample))
+
+
+################################################################################
+

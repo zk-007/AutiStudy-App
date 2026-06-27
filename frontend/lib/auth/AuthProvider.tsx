@@ -21,7 +21,7 @@ import {
   type ReactNode,
 } from "react";
 
-import { ApiError, authApi, getToken, setToken, type User } from "@/lib/api/client";
+import { ApiError, authApi, clearSession, getToken, loadStoredSession, saveSession, type User } from "@/lib/api/client";
 
 interface AuthContextValue {
   user: User | null;
@@ -43,33 +43,48 @@ const AuthContext = createContext<AuthContextValue | null>(null);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
-  // Start as loading so route guards don't flash redirects before we know
-  // whether the persisted token is still valid.
   const [isLoading, setIsLoading] = useState<boolean>(true);
 
-  // ── On first mount: if a token is in localStorage, validate it. ──────────
   useEffect(() => {
     const token = getToken();
+    const cached = loadStoredSession();
+
+    if (cached) {
+      setUser(cached.user);
+    }
+
     if (!token) {
       setIsLoading(false);
       return;
     }
+
     let cancelled = false;
+    const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
     (async () => {
-      try {
-        const me = await authApi.me();
-        if (!cancelled) setUser(me);
-      } catch (err) {
-        // Token is invalid/expired or backend is unreachable — clear it
-        // silently. The user will land on /login when they hit a guarded page.
-        if (err instanceof ApiError && err.status === 401) {
-          setToken(null);
+      for (let attempt = 0; attempt < 4; attempt++) {
+        if (cancelled) return;
+        try {
+          const me = await authApi.me();
+          if (!cancelled) {
+            setUser(me);
+            saveSession(token, me);
+          }
+          return;
+        } catch (err) {
+          if (err instanceof ApiError && err.status === 401) {
+            clearSession();
+            if (!cancelled) setUser(null);
+            return;
+          }
+          if (attempt < 3) await sleep(600 * (attempt + 1));
         }
-        if (!cancelled) setUser(null);
-      } finally {
-        if (!cancelled) setIsLoading(false);
       }
-    })();
+      if (!cancelled && !cached) setUser(null);
+    })().finally(() => {
+      if (!cancelled) setIsLoading(false);
+    });
+
     return () => {
       cancelled = true;
     };
@@ -77,14 +92,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const login = useCallback<AuthContextValue["login"]>(async (email, password) => {
     const res = await authApi.login({ email, password });
-    setToken(res.token);
+    saveSession(res.token, res.user);
     setUser(res.user);
     return res.user;
   }, []);
 
   const register = useCallback<AuthContextValue["register"]>(async (data) => {
     const res = await authApi.register(data);
-    setToken(res.token);
+    saveSession(res.token, res.user);
     setUser(res.user);
     return res.user;
   }, []);
@@ -96,7 +111,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       // Ignore — even if the server can't be reached, we still want to
       // log the user out locally.
     }
-    setToken(null);
+    clearSession();
     setUser(null);
   }, []);
 
@@ -104,9 +119,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       const me = await authApi.me();
       setUser(me);
+      const token = getToken();
+      if (token) saveSession(token, me);
     } catch {
       setUser(null);
-      setToken(null);
+      clearSession();
     }
   }, []);
 

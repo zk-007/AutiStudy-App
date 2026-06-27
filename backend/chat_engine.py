@@ -274,10 +274,15 @@ def generate_reply(
     history: Iterable[dict],
     language: str = "en",
     preferred_format: str = "normal",
-) -> str:
+) -> Dict[str, Any]:
     """
     Produce a tutor reply for `user_message`, grounded in the curriculum
     when possible.
+
+    Returns a dict with keys:
+      - text: the tutor reply
+      - is_relevant: whether the question matched textbook content
+      - query_related_to_subject: whether the question matches the session subject
 
     Delegates to `utils.llm.generate_response(..., use_rag=True)` so the
     React chat goes through the *same* hybrid-retrieval + reranker + GPT
@@ -287,37 +292,53 @@ def generate_reply(
     """
     _boot()
     history_list = [m for m in history if m.get("role") in {"user", "assistant"}]
+    default_meta = {"is_relevant": True, "query_related_to_subject": True}
 
     if not _have_key:
-        return _no_key_reply(user_message, language)
+        return {"text": _no_key_reply(user_message, language), **default_meta}
 
     format_hint = _FORMAT_INSTRUCTIONS.get(preferred_format, "")
 
     if _llm_module is not None:
         try:
-            text = _llm_module.generate_response(
+            result = _llm_module.generate_response(
                 user_message=user_message,
                 grade=grade,
                 subject=subject,
                 chat_history=history_list,
                 use_rag=True,
                 language=language,
-                extra_system_hint=format_hint,  # injected into system prompt
+                extra_system_hint=format_hint,
+                return_meta=True,
             )
-            text = (text or "").strip()
-            if text:
-                return text
+            if isinstance(result, dict):
+                text = (result.get("text") or "").strip()
+                if text:
+                    return {
+                        "text": text,
+                        "is_relevant": bool(result.get("is_relevant", True)),
+                        "query_related_to_subject": bool(
+                            result.get("query_related_to_subject", True)
+                        ),
+                    }
+            else:
+                text = (result or "").strip()
+                if text:
+                    return {"text": text, **default_meta}
         except Exception as err:
             print(f"[chat_engine] utils.llm.generate_response failed: {err}")
 
-    return _direct_reply(
-        user_message=user_message,
-        grade=grade,
-        subject=subject,
-        history=history_list,
-        language=language,
-        preferred_format=preferred_format,
-    )
+    return {
+        "text": _direct_reply(
+            user_message=user_message,
+            grade=grade,
+            subject=subject,
+            history=history_list,
+            language=language,
+            preferred_format=preferred_format,
+        ),
+        **default_meta,
+    }
 
 
 def generate_visual_aid(
@@ -550,3 +571,106 @@ def _llm_error_reply(language: str) -> str:
         "I'm having a little trouble thinking right now. "
         "Please try again in a moment."
     )
+
+
+_RECAP_SYSTEM = """You are a gentle tutor writing a short recap for a student with autism.
+Summarise ONLY what appears in the chat transcript — do not invent topics.
+
+Return ONLY valid JSON:
+{
+  "topic_summary": "One short title (e.g. 'Adding fractions')",
+  "key_points": ["3-6 simple bullet points the student learned or discussed"]
+}
+
+Rules:
+- Use very simple words suitable for the student's grade
+- Each key point is one short sentence
+- Focus on what was taught, not meta commentary
+- If the chat is very short, still extract whatever was covered"""
+
+
+def generate_session_recap(
+    *,
+    grade: int,
+    subject: str,
+    language: str,
+    messages: List[Dict[str, Any]],
+) -> Dict[str, Any]:
+    """
+    Build a recap for the current chat session.
+    Empty session → friendly message, no LLM call.
+    """
+    base = {"subject": subject, "grade": grade, "topic_summary": "", "key_points": []}
+
+    user_or_assistant = [
+        m for m in messages if m.get("role") in ("user", "assistant") and (m.get("content") or "").strip()
+    ]
+    if not user_or_assistant:
+        if language == "ur":
+            base["empty"] = True
+            base["message"] = "ابھی اس چیٹ میں کوئی سبق نہیں پڑھا۔ پہلے کچھ سوال پوچھیں، پھر ری کیپ دیکھیں۔"
+        else:
+            base["empty"] = True
+            base["message"] = (
+                "You haven't learned any lesson in this chat yet. "
+                "Ask a question first, then come back for your recap."
+            )
+        return base
+
+    _boot()
+    if not _have_key or _llm_module is None:
+        if language == "ur":
+            base["empty"] = True
+            base["message"] = "ری کیپ ابھی دستیاب نہیں — API کلید سیٹ نہیں ہے۔"
+        else:
+            base["empty"] = True
+            base["message"] = "Recap is not available right now (API not configured)."
+        return base
+
+    recent = user_or_assistant[-30:]
+    lines = []
+    for m in recent:
+        role = "Student" if m["role"] == "user" else "Tutor"
+        lines.append(f"{role}: {(m.get('content') or '').strip()}")
+    transcript = "\n".join(lines)
+
+    lang_note = "Write key_points in Urdu." if language == "ur" else "Write key_points in English."
+    user_prompt = (
+        f"Grade: {grade} | Subject: {subject}\n{lang_note}\n\n"
+        f"CHAT TRANSCRIPT:\n{transcript}\n\n"
+        "Summarise what this student studied in this chat."
+    )
+
+    try:
+        import json
+
+        client = _llm_module.get_openai_client()
+        if not client:
+            raise RuntimeError("no client")
+        response = client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[
+                {"role": "system", "content": _RECAP_SYSTEM},
+                {"role": "user", "content": user_prompt},
+            ],
+            temperature=0.3,
+            max_tokens=600,
+            response_format={"type": "json_object"},
+        )
+        raw = response.choices[0].message.content or "{}"
+        data = json.loads(raw)
+        points = [str(p).strip() for p in (data.get("key_points") or []) if str(p).strip()]
+        base["empty"] = False
+        base["message"] = ""
+        base["topic_summary"] = str(data.get("topic_summary") or subject).strip()
+        base["key_points"] = points[:8]
+        return base
+    except Exception as err:
+        print(f"[chat_engine] session recap failed: {err}")
+        if language == "ur":
+            base["empty"] = True
+            base["message"] = "ری کیپ بنانے میں مشکل ہوئی۔ تھوڑی دیر بعد دوبارہ کوشش کریں۔"
+        else:
+            base["empty"] = True
+            base["message"] = "Could not build your recap right now. Please try again in a moment."
+        return base

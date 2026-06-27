@@ -14,6 +14,7 @@ export const API_BASE =
 
 const TOKEN_KEY = "autistudy_token";
 const PARENT_TOKEN_KEY = "autistudy_parent_token";
+const SESSION_KEY = "autistudy_session";
 
 export function getToken(): string | null {
   if (typeof window === "undefined") return null;
@@ -24,6 +25,35 @@ export function setToken(token: string | null) {
   if (typeof window === "undefined") return;
   if (token) window.localStorage.setItem(TOKEN_KEY, token);
   else window.localStorage.removeItem(TOKEN_KEY);
+}
+
+/** Persist token + user so reload keeps the student signed in. */
+export function saveSession(token: string, user: User) {
+  if (typeof window === "undefined") return;
+  setToken(token);
+  window.localStorage.setItem(SESSION_KEY, JSON.stringify({ token, user }));
+}
+
+export function loadStoredSession(): { token: string; user: User } | null {
+  if (typeof window === "undefined") return null;
+  const token = getToken();
+  if (!token) return null;
+  try {
+    const raw = window.localStorage.getItem(SESSION_KEY);
+    if (!raw) return null;
+    const data = JSON.parse(raw) as { token: string; user: User };
+    if (data.token !== token || !data.user?.email) return null;
+    return data;
+  } catch {
+    return null;
+  }
+}
+
+export function clearSession() {
+  setToken(null);
+  if (typeof window !== "undefined") {
+    window.localStorage.removeItem(SESSION_KEY);
+  }
 }
 
 export function getParentToken(): string | null {
@@ -321,6 +351,7 @@ export interface ChatMessage {
   content: string;
   timestamp: string;
   image_url: string | null;
+  skip_tutor?: boolean;
   math_steps?: MathStepCard | null;
   emoji_counting?: EmojiCountingData | null;
   factor_tree?: FactorTreeData | null;
@@ -352,10 +383,25 @@ export interface ChatSessionSummary {
   message_count: number;
 }
 
+export interface SessionRecapResponse {
+  empty: boolean;
+  message: string;
+  topic_summary: string;
+  key_points: string[];
+  subject: string;
+  grade: number;
+}
+
 export interface SendMessageResponse {
   user_message: ChatMessage | null;
   assistant_message: ChatMessage;
-  session: { id: string; title: string | null; message_count: number };
+  is_relevant?: boolean;
+  session: {
+    id: string;
+    title: string | null;
+    message_count: number;
+    timestamp?: string | null;
+  };
 }
 
 export interface ChatConfig {
@@ -544,6 +590,8 @@ export const chatApi = {
       `/api/chat/sessions/${id}/quiz`,
       { method: "POST", body: {} },
     ),
+  getRecap: (id: string) =>
+    api<SessionRecapResponse>(`/api/chat/sessions/${id}/recap`),
   // Back-compat alias — older call sites may still use `generateImage`.
   generateImage: (id: string) =>
     api<GenerateVisualAidResponse>(`/api/chat/sessions/${id}/image`, {

@@ -1,0 +1,33 @@
+{
+  "description": "Gold procedural maths questions for RAT evaluation (Solution Correctness + Step Accuracy). Each item has a query and expected final answer for automated scoring.",
+  "grades": {
+    "4": [
+      {"id": "g4_01", "query": "Find the LCM of 6 and 8", "expected_answer": "24"},
+      {"id": "g4_02", "query": "Convert 3 meters into centimeters", "expected_answer": "300"},
+      {"id": "g4_03", "query": "What is 12 multiplied by 8?", "expected_answer": "96"},
+      {"id": "g4_04", "query": "Find 84 divided by 7", "expected_answer": "12"},
+      {"id": "g4_05", "query": "Add 245 and 378", "expected_answer": "623"}
+    ],
+    "5": [
+      {"id": "g5_01", "query": "Add 1/4 and 1/2", "expected_answer": "3/4"},
+      {"id": "g5_02", "query": "What is 0.5 plus 0.25?", "expected_answer": "0.75"},
+      {"id": "g5_03", "query": "Multiply 15 by 12", "expected_answer": "180"},
+      {"id": "g5_04", "query": "Find 144 divided by 12", "expected_answer": "12"},
+      {"id": "g5_05", "query": "Subtract 47 from 100", "expected_answer": "53"}
+    ],
+    "6": [
+      {"id": "g6_01", "query": "Simplify the ratio 12:18", "expected_answer": "2:3"},
+      {"id": "g6_02", "query": "What is 25 percent of 80?", "expected_answer": "20"},
+      {"id": "g6_03", "query": "Find the value of 5 squared plus 3 squared", "expected_answer": "34"},
+      {"id": "g6_04", "query": "Multiply 2/3 by 3/4", "expected_answer": "1/2"},
+      {"id": "g6_05", "query": "What is the HCF of 18 and 24?", "expected_answer": "6"}
+    ],
+    "7": [
+      {"id": "g7_01", "query": "Add -5 and 8", "expected_answer": "3"},
+      {"id": "g7_02", "query": "Multiply -3 by 4", "expected_answer": "-12"},
+      {"id": "g7_03", "query": "What is 2/5 plus 1/5?", "expected_answer": "3/5"},
+      {"id": "g7_04", "query": "Find 15 percent of 200", "expected_answer": "30"},
+      {"id": "g7_05", "query": "What is the square root of 144?", "expected_answer": "12"}
+    ]
+  }
+}

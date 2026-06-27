@@ -27,6 +27,10 @@ export const HAPPY_POPUP_PROMPTS = [
   "You seem happy with that — want to move on? Tap Yes! 👍",
 ];
 
+/** Shown when all help steps are used (including after the breathing exercise). */
+export const LADDER_EXHAUSTED_MESSAGE =
+  "We've tried lots of ways together! 🌿 Take a short break if you need one, or ask your question in a new way — I'm still here to help.";
+
 export interface StepMcq {
   step_label: string;
   question: string;
@@ -46,6 +50,7 @@ export interface FlowSnapshot {
   popupPromptIndex: number;
   happyPromptIndex: number;
   adaptationRound: AdaptationRound;
+  adaptationStepsTaken: number;
   blockInput: boolean;
   showBreathing: boolean;
   imageViewActive: boolean;
@@ -70,6 +75,8 @@ export class TutorComprehensionFlow {
   popupPromptIndex = 0;
   happyPromptIndex = 0;
   adaptationRound: AdaptationRound = 0;
+  adaptationStepsTaken = 0;
+  adaptationOrder: AdaptationRound[] = [1, 2, 3, 4, 5];
   blockInput = false;
   showBreathing = false;
   imageViewActive = false;
@@ -94,6 +101,7 @@ export class TutorComprehensionFlow {
       popupPromptIndex: this.popupPromptIndex,
       happyPromptIndex: this.happyPromptIndex,
       adaptationRound: this.adaptationRound,
+      adaptationStepsTaken: this.adaptationStepsTaken,
       blockInput: this.blockInput,
       showBreathing: this.showBreathing,
       imageViewActive: this.imageViewActive,
@@ -106,6 +114,23 @@ export class TutorComprehensionFlow {
       contentDeliveredAt: this.contentDeliveredAt,
       lastAdaptationContent: this.lastAdaptationContent,
     };
+  }
+
+  /** Set personalized help-ladder order for this student (from agent memory). */
+  setAdaptationOrder(order: AdaptationRound[]) {
+    const valid = order.filter((n) => n >= 1 && n <= 5);
+    const seen = new Set<AdaptationRound>();
+    const merged: AdaptationRound[] = [];
+    for (const n of valid) {
+      if (!seen.has(n)) {
+        seen.add(n);
+        merged.push(n);
+      }
+    }
+    for (const n of [1, 2, 3, 4, 5] as AdaptationRound[]) {
+      if (!seen.has(n)) merged.push(n);
+    }
+    this.adaptationOrder = merged.length ? merged : [1, 2, 3, 4, 5];
   }
 
   /** Content delivered — wait for gate before showing popup / starting 1-min CV. */
@@ -152,6 +177,7 @@ export class TutorComprehensionFlow {
     this.cvHappyMode = false;
     this.typingBlocked = false;
     this.adaptationRound = 0;
+    this.adaptationStepsTaken = 0;
     this.blockInput = false;
     this.showBreathing = false;
     this.imageViewActive = false;
@@ -199,6 +225,7 @@ export class TutorComprehensionFlow {
     this.phase = "idle";
     this.popupStartedAt = 0;
     this.adaptationRound = 0;
+    this.adaptationStepsTaken = 0;
     if (pauseCv) this.cvPaused = true;
   }
 
@@ -220,6 +247,7 @@ export class TutorComprehensionFlow {
     this.mcqIndex = 0;
     this.mcqPhase = "recall";
     this.adaptationRound = 0;
+    this.adaptationStepsTaken = 0;
     this.blockInput = false;
     this.phase = "idle";
     this.cvPaused = true;
@@ -227,16 +255,17 @@ export class TutorComprehensionFlow {
 
   /** Popup No or auto-adapt — returns next round to run. */
   onNeedAdaptation(): AdaptationRound | null {
-    if (this.adaptationRound >= 5) return null;
-    const next = (this.adaptationRound + 1) as AdaptationRound;
-    this.adaptationRound = next;
+    if (this.adaptationStepsTaken >= this.adaptationOrder.length) return null;
+    const round = this.adaptationOrder[this.adaptationStepsTaken];
+    this.adaptationStepsTaken += 1;
+    this.adaptationRound = round;
     this.showPopup = false;
     this.pendingPopup = false;
     this.popupGate = "none";
     this.popupDancing = false;
     this.typingBlocked = false;
     this.popupStartedAt = 0;
-    return next;
+    return round;
   }
 
   onAdaptationContent(content: string) {
@@ -257,10 +286,10 @@ export class TutorComprehensionFlow {
     this.mcqPhase = "recall";
     this.phase = "idle";
     this.popupStartedAt = 0;
+    this.adaptationRound = 0;
+    this.adaptationStepsTaken = 0;
     this.cvPaused = false;
   }
-
-  /** After text/voice/image adaptation — wait for gate, then popup. */
   onAdaptationComplete(gate: PopupGate = "scroll") {
     if (this.mcqActive || this.showBreathing) return;
     this.onContentDelivered(gate);
@@ -275,7 +304,9 @@ export class TutorComprehensionFlow {
 
   onBreathingComplete() {
     this.showBreathing = false;
-    this.activatePopup();
+    // After breathing (round 5), skip another popup — unlock chat with the
+    // gentle “we tried lots of ways” message instead.
+    this.onLadderExhausted();
   }
 
   onImageViewStart() {

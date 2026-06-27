@@ -21,6 +21,18 @@ import { EMOTION_META } from "@/expression-lab/emotions";
 import type { LabEmotion } from "@/expression-lab/types";
 import { LAB_EMOTIONS } from "@/expression-lab/types";
 
+/** Static Tailwind classes — must live in a scanned file so JIT includes every bar color. */
+const EMOTION_BAR_CLASS: Record<LabEmotion, string> = {
+  happy: "bg-emerald-500",
+  sad: "bg-indigo-500",
+  frustrated: "bg-rose-500",
+  bored: "bg-slate-400",
+  tired: "bg-violet-500",
+  inattentive: "bg-amber-500",
+  confused: "bg-yellow-500",
+  neutral: "bg-gray-400",
+};
+
 interface AdaptiveAgentPanelProps {
   state: AdaptiveTutorState;
   videoRef: React.RefObject<HTMLVideoElement | null>;
@@ -36,6 +48,7 @@ function ProbBar({
   const safeValue = isFinite(value) ? value : 0;
   const pct = Math.round(safeValue * 100);
   if (pct < 2) return null;
+  const barWidth = `${Math.max(4, Math.min(100, pct))}%`;
   return (
     <div className="space-y-0.5">
       <div className="flex items-center justify-between text-[10px] text-gray-600">
@@ -43,11 +56,9 @@ function ProbBar({
         <span className="font-mono">{pct}%</span>
       </div>
       <div className="h-1.5 rounded-full bg-gray-200 overflow-hidden">
-        <motion.div
-          className={`h-full rounded-full ${color}`}
-          initial={{ width: 0 }}
-          animate={{ width: `${Math.max(4, Math.min(100, pct))}%` }}
-          transition={{ duration: 0.4, ease: "easeOut" }}
+        <div
+          className={`h-full rounded-full transition-[width] duration-300 ease-out ${color}`}
+          style={{ width: barWidth }}
         />
       </div>
     </div>
@@ -115,7 +126,7 @@ export function AdaptiveAgentPanel({ state, videoRef, onStart, onStop }: Adaptiv
         initial={{ opacity: 0, x: 60 }}
         animate={{ opacity: 1, x: 0 }}
         transition={{ delay: 0.4, duration: 0.5 }}
-        className="fixed right-4 top-20 z-40 w-64"
+        className="fixed right-4 top-20 z-40 w-64 max-h-[calc(100vh-5rem)] flex flex-col"
       >
         {/* Header */}
         <div
@@ -151,9 +162,9 @@ export function AdaptiveAgentPanel({ state, videoRef, onStart, onStop }: Adaptiv
               initial={{ opacity: 0, height: 0 }}
               animate={{ opacity: 1, height: "auto" }}
               exit={{ opacity: 0, height: 0 }}
-              className="overflow-hidden"
+              className="overflow-hidden min-h-0 flex-1"
             >
-              <div className="mt-2 rounded-2xl bg-white/95 backdrop-blur shadow-lg border border-glacier-100 p-3 space-y-3">
+              <div className="mt-2 rounded-2xl bg-white/95 backdrop-blur shadow-lg border border-glacier-100 p-3 space-y-3 max-h-[calc(100vh-7.5rem)] overflow-y-auto overscroll-contain">
 
                 {/* Camera feed */}
                 <div className="rounded-xl overflow-hidden bg-black/10 aspect-video relative">
@@ -235,7 +246,7 @@ export function AdaptiveAgentPanel({ state, videoRef, onStart, onStop }: Adaptiv
                           label={meta.label}
                           emoji={meta.emoji}
                           value={v}
-                          color={meta.bar}
+                          color={EMOTION_BAR_CLASS[key]}
                         />
                       );
                     })}

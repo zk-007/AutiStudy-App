@@ -91,7 +91,9 @@ from utils.teaching_agent import (  # noqa: E402
 )
 from utils.media_agent import run_media_agent, decide_from_emotion  # noqa: E402
 from utils.agent_memory import (  # noqa: E402
+    get_adaptation_ladder_order,
     get_memory_summary,
+    record_adaptation_preference,
     record_session_summary as memory_record_session,
 )
 
@@ -111,13 +113,18 @@ app = FastAPI(
     version="0.1.0",
 )
 
+_default_origins = [
+    "http://localhost:3000",
+    "http://localhost:3001",
+    "http://127.0.0.1:3000",
+]
+_extra = os.getenv("CORS_ORIGINS", "")
+_cors_origins = _default_origins + [o.strip() for o in _extra.split(",") if o.strip()]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:3000",
-        "http://localhost:3001",
-        "http://127.0.0.1:3000",
-    ],
+    allow_origins=_cors_origins,
+    allow_origin_regex=os.getenv("CORS_ORIGIN_REGEX", r"https://.*\.vercel\.app"),
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -1049,6 +1056,7 @@ def _serialise_session(session: dict) -> dict:
                 "role": m.get("role"),
                 "content": m.get("content", ""),
                 "timestamp": m.get("timestamp"),
+                "skip_tutor": m.get("skip_tutor", False),
                 "image_url": m.get("image_url"),
                 "math_steps": m.get("math_steps"),
                 "emoji_counting": m.get("emoji_counting"),
@@ -1199,7 +1207,7 @@ async def send_message(
     # 2. Generate a tutor reply — run blocking httpx+OpenAI in the thread pool.
     #    The agent's preferred_format tells GPT HOW to structure the answer
     #    BEFORE it's generated (proactive format decision).
-    reply = await run_in_thread(
+    reply_result = await run_in_thread(
         generate_reply,
         user_message=text,
         grade=grade,
@@ -1208,9 +1216,17 @@ async def send_message(
         language=language,
         preferred_format=req.preferred_format,
     )
+    reply = reply_result["text"]
+    is_relevant = bool(reply_result.get("is_relevant", True))
 
     # 3. Persist the assistant reply.
-    save_message(current["email"], chat_id, "assistant", reply)
+    save_message(
+        current["email"],
+        chat_id,
+        "assistant",
+        reply,
+        skip_tutor=not is_relevant,
+    )
 
     # 4. Return the *latest* persisted versions so timestamps match disk.
     refreshed = get_chat_session(current["email"], chat_id) or session
@@ -1218,10 +1234,12 @@ async def send_message(
     return {
         "user_message": _serialise_session(refreshed)["messages"][-2] if len(msgs) >= 2 else None,
         "assistant_message": _serialise_session(refreshed)["messages"][-1],
+        "is_relevant": is_relevant,
         "session": {
             "id": refreshed["id"],
             "title": refreshed.get("title"),
             "message_count": len(msgs),
+            "timestamp": refreshed.get("timestamp"),
         },
     }
 
@@ -1598,6 +1616,28 @@ async def analytics(current=Depends(get_current_user)):
     # Also attach current stars from user profile
     data["total_stars"] = current["user"].get("stars", 0)
     return data
+
+
+@app.get("/api/chat/sessions/{chat_id}/recap")
+async def get_chat_recap(chat_id: str, current=Depends(get_current_user)):
+    """Recap of the current chat session — key points from this conversation."""
+    session = get_chat_session(current["email"], chat_id)
+    if not session:
+        raise HTTPException(404, "Chat session not found.")
+
+    from chat_engine import generate_session_recap
+
+    grade = current["user"].get("grade", 4)
+    subject = session.get("subject", "General")
+    language = session.get("language", "en")
+
+    return await run_in_thread(
+        generate_session_recap,
+        grade=grade,
+        subject=subject,
+        language=language,
+        messages=session.get("messages", []),
+    )
 
 
 @app.post("/api/chat/sessions/{chat_id}/quiz")
@@ -2047,6 +2087,53 @@ async def agent_session_summary(body: SessionSummaryRequest, current=Depends(get
         outcome=body.outcome,
     )
     return {"ok": True}
+
+
+class RecordAdaptationPrefRequest(BaseModel):
+    subject: str
+    adaptation: str  # step_by_step | read_aloud | image | mcq_recall | breathing
+    via: str = "popup_yes"
+    happy_cv: bool = False
+
+
+@app.post("/api/agent/record-adaptation-preference")
+async def agent_record_adaptation_preference(
+    body: RecordAdaptationPrefRequest,
+    current=Depends(get_current_user),
+):
+    """Save which help step worked when the student confirmed understanding."""
+    await run_in_thread(
+        record_adaptation_preference,
+        current["email"],
+        body.subject,
+        body.adaptation,
+        via=body.via,
+        happy_cv=body.happy_cv,
+    )
+    order = await run_in_thread(
+        get_adaptation_ladder_order,
+        current["email"],
+        body.subject,
+    )
+    return {"ok": True, "ladder_order": order}
+
+
+@app.get("/api/agent/adaptation-ladder")
+async def agent_adaptation_ladder(subject: str, current=Depends(get_current_user)):
+    """Personalized help-ladder order for this student + subject."""
+    order = await run_in_thread(
+        get_adaptation_ladder_order,
+        current["email"],
+        subject,
+    )
+    from utils.agent_memory import get_preferred_adaptation
+
+    preferred = await run_in_thread(
+        get_preferred_adaptation,
+        current["email"],
+        subject,
+    )
+    return {"ladder_order": order, "preferred_adaptation": preferred}
 
 
 @app.get("/api/agent/memory")

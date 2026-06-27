@@ -13,7 +13,7 @@ import {
   TEXT_READ_MS,
 
   IMAGE_VIEW_MS,
-
+  LADDER_EXHAUSTED_MESSAGE,
   type FlowSnapshot,
 
   type StepMcq,
@@ -33,6 +33,11 @@ import {
 import type { LabEmotion } from "@/expression-lab/types";
 
 import { API_BASE } from "@/lib/api/client";
+
+import {
+  normalizeLadderOrder,
+  roundToModality,
+} from "@/lib/agent/adaptationLadder";
 
 
 
@@ -76,6 +81,9 @@ export interface UseComprehensionFlowOptions {
   sessionId: string | null;
 
   subject: string;
+
+  /** Used to load/save per-student adaptation preferences. */
+  studentEmail?: string | null;
 
   hybridScores: Partial<Record<LabEmotion, number>> | null;
 
@@ -180,6 +188,8 @@ export function useComprehensionFlow({
 
   subject,
 
+  studentEmail,
+
   hybridScores,
 
   hybridDominant,
@@ -210,6 +220,8 @@ export function useComprehensionFlow({
 
   callbacksRef.current = callbacks;
 
+  const onPopupYesRef = useRef<(() => void | Promise<void>) | null>(null);
+
 
 
   const sync = useCallback(() => {
@@ -217,6 +229,62 @@ export function useComprehensionFlow({
     setFlow(flowRef.current.snapshot());
 
   }, []);
+
+
+
+  // Load this student's personalized help-ladder order for this subject.
+  useEffect(() => {
+    if (!studentEmail || !subject) return;
+    let cancelled = false;
+    const token = localStorage.getItem("autistudy_token");
+    fetch(
+      `${API_BASE}/api/agent/adaptation-ladder?subject=${encodeURIComponent(subject)}`,
+      { headers: token ? { Authorization: `Bearer ${token}` } : {} },
+    )
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => {
+        if (cancelled || !data?.ladder_order) return;
+        flowRef.current.setAdaptationOrder(normalizeLadderOrder(data.ladder_order));
+        sync();
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [studentEmail, subject, sync]);
+
+
+
+  const recordWinningAdaptation = useCallback(
+    (round: number, happyCv: boolean) => {
+      if (!studentEmail || round < 1) return;
+      const adaptation = roundToModality(round as 0 | 1 | 2 | 3 | 4 | 5);
+      if (!adaptation) return;
+      const token = localStorage.getItem("autistudy_token");
+      fetch(`${API_BASE}/api/agent/record-adaptation-preference`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({
+          subject,
+          adaptation,
+          via: happyCv ? "happy_cv" : "popup_yes",
+          happy_cv: happyCv,
+        }),
+      })
+        .then((r) => (r.ok ? r.json() : null))
+        .then((data) => {
+          if (data?.ladder_order) {
+            flowRef.current.setAdaptationOrder(normalizeLadderOrder(data.ladder_order));
+            sync();
+          }
+        })
+        .catch(() => {});
+    },
+    [studentEmail, subject, sync],
+  );
 
 
 
@@ -313,11 +381,9 @@ export function useComprehensionFlow({
       void runAdaptation(round);
       return;
     }
-    if (f.adaptationRound >= 5) {
+    if (f.adaptationStepsTaken >= 5) {
       f.onLadderExhausted();
-      callbacksRef.current.onAppendMessage(
-        "We've tried lots of ways together! 🌿 Take a short break if you need one, or ask your question in a new way — I'm still here to help.",
-      );
+      callbacksRef.current.onAppendMessage(LADDER_EXHAUSTED_MESSAGE);
       sync();
     }
   }, [runAdaptation, sync]);
@@ -350,9 +416,12 @@ export function useComprehensionFlow({
 
   const onPopupYes = useCallback(async () => {
     const f = flowRef.current;
+    const winningRound = f.adaptationRound;
+    const happyCv = f.cvHappyMode;
 
     // Step 4+ — always celebrate + quiz, ignore happy/sad CV
     if (f.adaptationRound >= 4 && !f.mcqActive) {
+      recordWinningAdaptation(winningRound, happyCv);
       f.closePopupForCelebrationQuiz();
       callbacksRef.current.onAppendMessage(
         CELEBRATION_INTROS[Math.floor(Math.random() * CELEBRATION_INTROS.length)],
@@ -375,10 +444,13 @@ export function useComprehensionFlow({
 
     const bucket = resolveEmotionBucket(hybridScores ?? {}, hybridDominant);
     const pause = shouldPauseCvAfterYes(bucket);
+    recordWinningAdaptation(winningRound, happyCv);
     f.onPopupYes(pause);
     bucketSinceRef.current = null;
     sync();
-  }, [hybridScores, sync, sessionId, subject, lastQuestion, lastAnswer]);
+  }, [hybridScores, hybridDominant, recordWinningAdaptation, sync, sessionId, subject, lastQuestion, lastAnswer]);
+
+  onPopupYesRef.current = onPopupYes;
 
 
 
@@ -403,11 +475,9 @@ export function useComprehensionFlow({
 
 
   const onBreathingComplete = useCallback(() => {
-
     flowRef.current.onBreathingComplete();
-
+    callbacksRef.current.onAppendMessage(LADDER_EXHAUSTED_MESSAGE);
     sync();
-
   }, [sync]);
 
 
@@ -493,11 +563,11 @@ export function useComprehensionFlow({
 
 
 
-  // CV monitoring during popup wait
-
+  // CV monitoring during popup wait (camera on only — off = manual Yes/Not yet)
   useEffect(() => {
 
     if (!flow.showPopup || flow.cvPaused || adaptingRef.current) return;
+    if (!cameraEnabled) return;
 
 
 
@@ -530,6 +600,16 @@ export function useComprehensionFlow({
 
 
       if (bucket === "happy") {
+        // After training MCQs: stable smile → test / appreciation MCQs (same as Yes)
+        if (
+          f.adaptationRound >= 4 &&
+          !f.mcqActive &&
+          stableFor >= AUTO_ADAPT_STABLE_MS &&
+          !adaptingRef.current
+        ) {
+          void onPopupYesRef.current?.();
+          return;
+        }
         if (now - lastHappyPromptAtRef.current >= HAPPY_PROMPT_COOLDOWN_MS) {
           lastHappyPromptAtRef.current = now;
           f.onCvHappyDuringWait();

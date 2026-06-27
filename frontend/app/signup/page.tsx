@@ -1,6 +1,6 @@
 "use client";
 
-import { ChangeEvent, FormEvent, Suspense, useRef, useState } from "react";
+import { ChangeEvent, FormEvent, Suspense, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
@@ -13,8 +13,8 @@ import { Footer } from "@/components/layout/Footer";
 import { DancingButton } from "@/components/primitives/DancingButton";
 import { useLocale } from "@/lib/i18n/LocaleProvider";
 import { useAuth } from "@/lib/auth/AuthProvider";
-import { safeNext } from "@/lib/auth/redirect";
-import { ApiError, parentApi, setParentToken } from "@/lib/api/client";
+import { resolveReturnUrl, clearReturnUrl } from "@/lib/auth/redirect";
+import { ApiError, parentApi, saveSession, setParentToken } from "@/lib/api/client";
 
 export default function SignupPage() {
   return (
@@ -31,8 +31,14 @@ function SignupInner() {
   const { t } = useLocale();
   const router = useRouter();
   const search = useSearchParams();
-  const { register } = useAuth();
-  const nextUrl = safeNext(search?.get("next"));
+  const { register, refresh, isAuthenticated, isLoading: authLoading } = useAuth();
+  const nextUrl = resolveReturnUrl(search?.get("next"));
+
+  useEffect(() => {
+    if (!authLoading && isAuthenticated) {
+      router.replace(nextUrl);
+    }
+  }, [authLoading, isAuthenticated, nextUrl, router]);
 
   const [role, setRole] = useState<Role | null>(null);
 
@@ -89,9 +95,11 @@ function SignupInner() {
                 <ChildSignupForm
                   onBack={() => setRole(null)}
                   onSuccess={(token) => {
+                    clearReturnUrl();
                     router.push(nextUrl);
                   }}
                   register={register}
+                  refresh={refresh}
                   nextUrl={nextUrl}
                   router={router}
                 />
@@ -112,11 +120,12 @@ function SignupInner() {
 // ── Child signup form ─────────────────────────────────────────────────────────
 
 function ChildSignupForm({
-  onBack, onSuccess, register, nextUrl, router,
+  onBack, onSuccess, register, refresh, nextUrl, router,
 }: {
   onBack: () => void;
   onSuccess: (token: string) => void;
   register: (data: { name: string; email: string; password: string; grade: number; role?: string }) => Promise<unknown>;
+  refresh: () => Promise<void>;
   nextUrl: string;
   router: ReturnType<typeof useRouter>;
 }) {
@@ -165,9 +174,9 @@ function ChildSignupForm({
     try {
       const res = await parentApi.childSignup({ name, email, password, grade, cnic: rawCnic, bform: bformFile });
       setOcrStatus("ok");
-      import("@/lib/api/client").then(({ setToken }) => {
-        setToken(res.token);
-      });
+      saveSession(res.token, res.user);
+      await refresh();
+      clearReturnUrl();
       router.push(nextUrl);
     } catch (err) {
       setOcrStatus("error");

@@ -224,6 +224,71 @@ def get_system_prompt(language: str = "en") -> str:
     return SYSTEM_PROMPT_EN
 
 
+def _build_off_topic_system_prompt(
+    grade: int,
+    subject: str,
+    language: str,
+    query_related_to_subject: bool,
+) -> str:
+    """Prompt for questions outside the textbook — no tutoring ladder / tell-me-more."""
+    from utils.book_parser import format_book_units_list
+
+    units = format_book_units_list(grade, subject, language)
+    units_block = units if units else (
+        "  (Unit list unavailable — ask your teacher for the chapter names.)"
+        if language == "en"
+        else "  (یونٹ کی فہرست دستیاب نہیں — اپنے استاد سے باب کے نام پوچھیں۔)"
+    )
+
+    if language == "ur":
+        if not query_related_to_subject:
+            opener = f"یہ سوال {subject} سے متعلق نہیں لگتا۔"
+        else:
+            opener = f"یہ موضوع جماعت {grade} کی {subject} نصابی کتاب میں نہیں ہے۔"
+        return f"""آپ آٹی اسٹڈی AI ٹیوٹر ہیں — پاکستان میں جماعت 4-7 کے طلباء کے لیے۔
+
+{opener}
+
+جواب EXACTLY اس ترتیب میں دیں (آسان اردو):
+1. ایک جملے میں واضح کریں کہ یہ سوال کتاب / نصاب سے باہر ہے۔
+2. سرخی: "آپ کی جماعت {grade} {subject} کتاب کے موضوعات:"
+3. یہ فہرست بالکل ویسی ہی لکھیں:
+{units_block}
+4. زیادہ سے زیادہ دو مختصر جملوں میں سوال سے تھوڑا سا تعلق رکھتے ہوئے hint دیں (اختیاری)۔
+5. آخر میں بالکل یہ لکھیں: "براہ کرم اوپر دی گئی کتاب کے موضوعات میں سے کوئی اور سوال پوچھیں۔ 📚"
+
+قواعد:
+- step-by-step tutoring نہ کریں۔
+- "مزید بتائیں" یا "tell me more" نہ لکھیں۔
+- "کیا آپ سمجھ گئے؟" نہ پوچھیں۔
+- پورا جواب ~150 الفاظ سے کم رکھیں۔
+"""
+
+    if not query_related_to_subject:
+        opener = f"This question does NOT seem to be about {subject}."
+    else:
+        opener = f"This topic is NOT in the student's Grade {grade} {subject} textbook."
+
+    return f"""You are AutiStudy AI Tutor for autistic students in grades 4-7 in Pakistan.
+
+{opener}
+
+Reply in EXACTLY this structure (friendly, simple English):
+1. One clear sentence saying this question is outside / not in their textbook.
+2. A heading line: "Topics in your Grade {grade} {subject} book:"
+3. Copy this list exactly:
+{units_block}
+4. At most TWO short sentences with a tiny hint related to their question (optional).
+5. End with exactly: "Please ask me another question from your textbook topics above. 📚"
+
+RULES:
+- Do NOT use step-by-step tutoring.
+- Do NOT say "tell me more" or offer to continue explaining.
+- Do NOT ask "did you understand?"
+- Keep the whole reply under ~150 words.
+"""
+
+
 def generate_response(
     user_message: str,
     grade: int,
@@ -232,18 +297,32 @@ def generate_response(
     use_rag: bool = True,
     language: str = None,
     extra_system_hint: str = "",
-) -> str:
+    return_meta: bool = False,
+):
     """Generate a response using GPT-4o-mini with optional RAG."""
     if language is None:
         language = "en"
 
+    def _wrap(text: str, *, is_relevant: bool = True, query_related: bool = True):
+        if return_meta:
+            return {
+                "text": text,
+                "is_relevant": is_relevant,
+                "query_related_to_subject": query_related,
+            }
+        return text
+
     client = get_openai_client()
     if not client:
         if language == "ur":
-            return "معذرت، لیکن میں ابھی صحیح طریقے سے ترتیب نہیں ہوں۔ براہ کرم اپنے استاد سے OpenAI API کلید سیٹ اپ کرنے کو کہیں۔"
-        return (
+            return _wrap(
+                "معذرت، لیکن میں ابھی صحیح طریقے سے ترتیب نہیں ہوں۔ براہ کرم اپنے استاد سے OpenAI API کلید سیٹ اپ کرنے کو کہیں۔",
+                is_relevant=False,
+            )
+        return _wrap(
             "I'm sorry, but I'm not properly configured yet. "
-            "Please ask your teacher to set up the OpenAI API key."
+            "Please ask your teacher to set up the OpenAI API key.",
+            is_relevant=False,
         )
 
     context = ""
@@ -290,50 +369,12 @@ def generate_response(
         else:
             system_prompt += f"\n\nRelevant learning material:\n{context}"
     elif not is_from_textbook:
-        # Determine if it's a wrong subject question or just out of textbook
-        if not query_related_to_subject:
-            # Question is about a different subject entirely
-            if language == "ur":
-                system_prompt += f"""
+        system_prompt = _build_off_topic_system_prompt(
+            grade, subject, language, query_related_to_subject
+        )
 
-اہم: یہ سوال {subject} کا نہیں لگتا۔ براہ کرم:
-1. طالب علم کو بتائیں کہ "یہ سوال {subject} سے متعلق نہیں لگتا۔"
-2. انہیں بتائیں کہ وہ صحیح مضمون منتخب کریں (مثلاً سائنس، کمپیوٹر وغیرہ)
-3. ایک بہت مختصر وضاحت دیں (2-3 جملے) صرف مدد کے لیے
-4. انہیں {subject} کے سوالات پوچھنے کی حوصلہ افزائی کریں
-"""
-            else:
-                system_prompt += f"""
-
-IMPORTANT: This question does NOT seem to be about {subject}. Please:
-1. Tell the student: "This question doesn't seem to be about {subject}."
-2. Suggest they select the correct subject (like Science, Computer, etc.)
-3. Give a VERY brief explanation (2-3 sentences only) just to help
-4. Encourage them to ask {subject} questions instead
-
-Example response: "This looks like a Science question, not {subject}! But briefly, [very short answer]. For more Science help, go back and select the Science subject. Meanwhile, I'm here to help you with {subject}!"
-"""
-        else:
-            # Question seems related to subject but not in textbook
-            if language == "ur":
-                system_prompt += f"""
-
-اہم: یہ موضوع طالب علم کی جماعت {grade} کی {subject} کتاب میں نہیں ہے۔ براہ کرم:
-1. پہلے طالب علم کو بتائیں کہ یہ موضوع ان کی نصابی کتاب میں نہیں ہے
-2. پھر ایک مختصر، آسان وضاحت دیں
-3. طالب علم کو یاد دلائیں کہ وہ اپنی نصابی کتاب سے متعلق سوالات پوچھیں
-"""
-            else:
-                system_prompt += f"""
-
-IMPORTANT: This topic is NOT covered in the student's Grade {grade} {subject} textbook. Please:
-1. First, kindly inform the student that this topic is not in their textbook
-2. Then, provide a brief, simple explanation
-3. Encourage the student to ask questions from their textbook topics
-"""
-
-    # Inject the agent's proactive format decision into the system prompt
-    if extra_system_hint:
+    # Tutoring-agent format hints only apply to on-textbook questions.
+    if extra_system_hint and is_from_textbook:
         system_prompt += extra_system_hint
 
     messages = [{"role": "system", "content": system_prompt}]
@@ -351,13 +392,24 @@ IMPORTANT: This topic is NOT covered in the student's Grade {grade} {subject} te
             model="gpt-4o-mini",
             messages=messages,
             temperature=0.7,
-            max_tokens=600,
+            max_tokens=350 if not is_from_textbook else 600,
         )
-        return response.choices[0].message.content
+        text = response.choices[0].message.content
+        return _wrap(
+            text,
+            is_relevant=is_from_textbook,
+            query_related=query_related_to_subject,
+        )
     except Exception as e:
         if language == "ur":
-            return f"مجھے ابھی سوچنے میں مشکل ہو رہی ہے۔ دوبارہ کوشش کرتے ہیں! (خرابی: {str(e)})"
-        return f"I'm having trouble thinking right now. Let's try again! (Error: {str(e)})"
+            return _wrap(
+                f"مجھے ابھی سوچنے میں مشکل ہو رہی ہے۔ دوبارہ کوشش کرتے ہیں! (خرابی: {str(e)})",
+                is_relevant=False,
+            )
+        return _wrap(
+            f"I'm having trouble thinking right now. Let's try again! (Error: {str(e)})",
+            is_relevant=False,
+        )
 
 
 # =========================================================

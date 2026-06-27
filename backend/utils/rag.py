@@ -40,12 +40,51 @@ CHROMA_COLLECTION = os.getenv("CHROMA_COLLECTION", "ptb_textbooks")
 EMBED_MODEL_NAME = "sentence-transformers/all-MiniLM-L6-v2"
 RERANKER_MODEL_NAME = "cross-encoder/ms-marco-MiniLM-L-6-v2"
 
-# Document IDs for each subject (from notebooks)
-DOC_IDS = {
-    "Maths": "MATH4",
-    "General Science": "GS4", 
-    "Computer": "CS6"
+# Chroma doc_id per (grade, subject) — matches OneSharedChromaDB / ptb_textbooks
+GRADE_DOC_IDS: Dict[Tuple[int, str], str] = {
+    (4, "Maths"): "MATH4",
+    (4, "General Science"): "GS4",
+    (5, "Maths"): "MATH5",
+    (5, "General Science"): "GS5",
+    (6, "Maths"): "MATH6",
+    (6, "General Science"): "GS6",
+    (6, "Computer"): "CS6",
+    (7, "Maths"): "MATH7",
+    (7, "General Science"): "GS7",
+    (7, "Computer"): "CS7",
 }
+
+# Legacy fallbacks when grade/subject combo is unknown
+_SUBJECT_DOC_FALLBACK = {
+    "Maths": "MATH4",
+    "General Science": "GS4",
+    "Computer": "CS6",
+}
+
+_SUBJECT_ALIASES = {
+    "Computer Science": "Computer",
+}
+
+
+def normalize_subject(subject: str) -> str:
+    """Map API/quiz subject labels to the keys used in GRADE_DOC_IDS."""
+    return _SUBJECT_ALIASES.get(subject, subject)
+
+
+def get_doc_id_for_grade(grade: int, subject: str) -> str:
+    """Resolve the ChromaDB doc_id for a student's grade and subject."""
+    subject_key = normalize_subject(subject)
+    doc_id = GRADE_DOC_IDS.get((grade, subject_key))
+    if doc_id:
+        return doc_id
+    fallback = _SUBJECT_DOC_FALLBACK.get(subject_key)
+    if fallback:
+        print(
+            f"[RAG] No doc_id for grade={grade} subject={subject!r}; "
+            f"falling back to {fallback}"
+        )
+        return fallback
+    raise ValueError(f"Unknown subject for RAG retrieval: {subject!r}")
 
 # Grade to subjects mapping (used by ai_tutor.py)
 GRADE_SUBJECTS = {
@@ -442,14 +481,14 @@ def rerank_math(query: str, candidates: List[Dict], intent: str, top_k: int = 6)
         return filt[:top_k]
 
 
-def retrieve_math(query: str, k: int = 6) -> Dict:
+def retrieve_math(query: str, k: int = 6, doc_id: str = "MATH4") -> Dict:
     """Final retrieve for Math (CELL 35)"""
     original_query = query
     rewritten_query = rewrite_query(query)
     
     intent = detect_intent_math(rewritten_query)
     
-    cands = hybrid_candidates_math(rewritten_query)
+    cands = hybrid_candidates_math(rewritten_query, doc_id=doc_id)
     
     ch_hint, ch_conf = pick_chapter_hint(cands[:10])
     
@@ -527,7 +566,9 @@ Steps:
     return _llm_chat("", prompt, 200)
 
 
-def rat_retrieve_with_thoughts(question: str, cot_text: str) -> List[Dict]:
+def rat_retrieve_with_thoughts(
+    question: str, cot_text: str, doc_id: str = "MATH4"
+) -> List[Dict]:
     """RAT Module 2: Use Thoughts as Retrieval Queries (CELL 42).
 
     Retrieval is limited to the original question plus at most 2 CoT lines
@@ -544,7 +585,7 @@ def rat_retrieve_with_thoughts(question: str, cot_text: str) -> List[Dict]:
 
     all_hits = []
     for q in queries:
-        r = retrieve_math(q)
+        r = retrieve_math(q, doc_id=doc_id)
         all_hits.extend(r["hits"])
 
     return all_hits
@@ -585,17 +626,17 @@ def rat_reasoning_pipeline(question: str) -> Tuple[List[str], List[Dict]]:
     return verified_steps, hits
 
 
-def retrieve_math_rat(query: str, k: int = 6) -> Dict:
+def retrieve_math_rat(query: str, k: int = 6, doc_id: str = "MATH4") -> Dict:
     """RAT-Based Retrieval Wrapper (CELL 46)"""
     # 1) Generate reasoning (RAT thoughts)
     cot = rat_generate_initial_cot(query)
     
     # 2) Retrieve using thoughts
-    rat_hits = rat_retrieve_with_thoughts(query, cot)
+    rat_hits = rat_retrieve_with_thoughts(query, cot, doc_id=doc_id)
     
     # Safety fallback
     if not rat_hits:
-        return retrieve_math(query, k)
+        return retrieve_math(query, k, doc_id=doc_id)
     
     # 3) Deduplicate by chunk id
     seen = {}
@@ -761,13 +802,19 @@ def rrf_fuse(list_a: List[Dict], list_b: List[Dict], k: int = 60) -> List[Dict]:
     return sorted(pool.values(), key=lambda x: x["rrf"], reverse=True)
 
 
-def retrieve_hybrid_computer(query: str, top_k: int = 8, dense_k: int = 40, bm25_k: int = 40) -> Dict:
+def retrieve_hybrid_computer(
+    query: str,
+    top_k: int = 8,
+    dense_k: int = 40,
+    bm25_k: int = 40,
+    doc_id: str = "CS6",
+) -> Dict:
     """Hybrid retrieval for Computer (CELL 19)"""
     intent = detect_intent_computer(query)
     allowed = allowed_block_types_computer(intent)
     
-    dense = chroma_dense_computer(query, top_k=dense_k)
-    lex = bm25_lexical_computer(query, top_k=bm25_k)
+    dense = chroma_dense_computer(query, doc_id=doc_id, top_k=dense_k)
+    lex = bm25_lexical_computer(query, doc_id=doc_id, top_k=bm25_k)
     
     fused = rrf_fuse(dense, lex, k=60)
     
@@ -899,13 +946,19 @@ def bm25_lexical_science(query: str, doc_id: str = "GS4", top_k: int = 25) -> Li
         return []
 
 
-def retrieve_hybrid_science(query: str, top_k: int = 8, dense_k: int = 40, bm25_k: int = 40) -> Dict:
+def retrieve_hybrid_science(
+    query: str,
+    top_k: int = 8,
+    dense_k: int = 40,
+    bm25_k: int = 40,
+    doc_id: str = "GS4",
+) -> Dict:
     """Hybrid retrieval for Science"""
     intent = detect_intent_science(query)
     allowed = allowed_block_types_science(intent)
     
-    dense = chroma_dense_science(query, top_k=dense_k)
-    lex = bm25_lexical_science(query, top_k=bm25_k)
+    dense = chroma_dense_science(query, doc_id=doc_id, top_k=dense_k)
+    lex = bm25_lexical_science(query, doc_id=doc_id, top_k=bm25_k)
     
     fused = rrf_fuse(dense, lex, k=60)
     
@@ -939,33 +992,51 @@ def retrieve_hybrid_science(query: str, top_k: int = 8, dense_k: int = 40, bm25_
 # MAIN QUERY FUNCTION (Routes to subject-specific pipeline)
 # ============================================================
 
+def _hit_primary_score(h: Dict) -> Optional[float]:
+    """Pick the best score field for one hit (pipelines use different fields)."""
+    if h.get("rerank_score") is not None:
+        return float(h["rerank_score"])
+    if h.get("score") is not None:
+        return float(h["score"])
+    if h.get("dense_sim") is not None:
+        return float(h["dense_sim"])
+    if h.get("hybrid_score") is not None:
+        return float(h["hybrid_score"])
+    if h.get("rrf") is not None:
+        return float(h["rrf"])
+    return None
+
+
 def compute_relevance_score(hits: List[Dict]) -> float:
     """
-    Compute overall relevance score from retrieved hits.
-    Returns a score between 0.0 and 1.0.
+    Compute overall relevance from the top-ranked hit.
+
+    Pipelines store scores differently:
+    - Maths: cross-encoder rerank_score (good > ~0, bad is negative)
+    - Science/Computer: Chroma dense similarity in ``score`` (~0.3–0.9)
+    - RRF fusion scores are tiny (~0.03) and must NOT be preferred over dense sim
     """
     if not hits:
         return 0.0
-    
-    scores = []
-    for h in hits:
-        # Try different score fields
-        score = h.get("rerank_score") or h.get("dense_sim") or h.get("hybrid_score") or h.get("rrf") or h.get("score", 0)
-        if score:
-            scores.append(float(score))
-    
-    if not scores:
+
+    top = hits[0]
+    score = _hit_primary_score(top)
+    if score is None:
         return 0.0
-    
-    # Use average of top 3 scores
-    top_scores = sorted(scores, reverse=True)[:3]
-    avg_score = sum(top_scores) / len(top_scores)
-    
-    # Normalize to 0-1 range (rerank scores can be negative)
-    # Typical good rerank scores are > 0.5, poor are < 0
-    if avg_score < 0:
-        return max(0.0, 0.3 + avg_score * 0.1)  # Map negative to low positive
-    return min(1.0, avg_score)
+
+    if top.get("rerank_score") is not None:
+        if score < 0:
+            return max(0.0, 0.3 + score * 0.1)
+        return min(1.0, score)
+
+    if top.get("score") is not None or top.get("dense_sim") is not None:
+        return min(1.0, max(0.0, score))
+
+    # RRF-only (no dense sim on fused hit): small rank scores; any gated hit counts
+    if top.get("rrf") is not None:
+        return 0.5
+
+    return min(1.0, max(0.0, score))
 
 
 # Subject-specific keywords to help detect off-topic questions
@@ -1008,7 +1079,7 @@ def is_query_related_to_subject(query: str, subject: str) -> bool:
     Returns True if query seems related, False if it seems off-topic.
     """
     query_lower = query.lower()
-    keywords = SUBJECT_KEYWORDS.get(subject, [])
+    keywords = SUBJECT_KEYWORDS.get(normalize_subject(subject), [])
     
     # Check if any subject keyword appears in the query
     for keyword in keywords:
@@ -1041,43 +1112,41 @@ def query_knowledge_base(
     - Computer: Hybrid + RRF + Keyword Gate + Type Filtering
     - Science: Hybrid + RRF + Keyword Gate + Type Filtering
     """
-    print(f"[RAG] Query: '{query[:50]}...' | Grade: {grade} | Subject: {subject}")
+    subject_key = normalize_subject(subject)
+    doc_id = get_doc_id_for_grade(grade, subject)
+    print(
+        f"[RAG] Query: '{query[:50]}...' | Grade: {grade} | "
+        f"Subject: {subject_key} | doc_id: {doc_id}"
+    )
 
     # Quick topic-relatedness check used for relevance threshold selection below.
-    quick_related = is_query_related_to_subject(query, subject)
+    quick_related = is_query_related_to_subject(query, subject_key)
 
-    # Route to subject-specific pipeline
-    if subject == "Maths":
-        # RAT (Retrieve-And-Think) improves retrieval quality by generating a
-        # chain-of-thought and querying the vector store for each CoT step.
-        # However, each `retrieve_math` call inside RAT runs a CrossEncoder
-        # reranking pass (~5 s on CPU). With 3 CoT queries that's 15+ s just
-        # for retrieval — far too slow for a real-time chat API.
-        #
-        # We therefore skip RAT and use the faster single-pass `retrieve_math`.
-        # Accuracy is still high for curriculum questions; students rarely ask
-        # questions complex enough that RAT's extra passes make a difference.
-        if use_rat and False:  # RAT disabled for latency — see comment above
+    # Route to subject-specific pipeline (scoped to this grade's textbook)
+    if subject_key == "Maths":
+        # RAT (Retrieve-And-Think): CoT generation → multi-query retrieval → rerank.
+        # Slower than single-pass hybrid (~15+ s on CPU) but improves procedural maths.
+        if use_rat:
             try:
-                result = retrieve_math_rat(query, k=n_results)
+                result = retrieve_math_rat(query, k=n_results, doc_id=doc_id)
             except Exception as e:
                 print(f"[RAG] RAT failed, falling back: {e}")
-                result = retrieve_math(query, k=n_results)
+                result = retrieve_math(query, k=n_results, doc_id=doc_id)
         else:
-            result = retrieve_math(query, k=n_results)
+            result = retrieve_math(query, k=n_results, doc_id=doc_id)
         hits = result.get("hits", [])
         
-    elif subject == "Computer":
-        result = retrieve_hybrid_computer(query, top_k=n_results)
+    elif subject_key == "Computer":
+        result = retrieve_hybrid_computer(query, top_k=n_results, doc_id=doc_id)
         hits = result.get("hits", [])
         
-    elif subject == "General Science":
-        result = retrieve_hybrid_science(query, top_k=n_results)
+    elif subject_key == "General Science":
+        result = retrieve_hybrid_science(query, top_k=n_results, doc_id=doc_id)
         hits = result.get("hits", [])
         
     else:
         # Fallback
-        result = retrieve_hybrid_science(query, top_k=n_results)
+        result = retrieve_hybrid_science(query, top_k=n_results, doc_id=doc_id)
         hits = result.get("hits", [])
     
     # Re-use the quick_related result computed before the routing (avoids a
@@ -1111,7 +1180,9 @@ def query_knowledge_base(
         "documents": documents,
         "relevance_score": relevance_score,
         "is_relevant": is_relevant,
-        "subject": subject,
+        "subject": subject_key,
+        "doc_id": doc_id,
+        "grade": grade,
         "query_related_to_subject": query_seems_related
     }
 

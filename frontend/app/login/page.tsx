@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, Suspense, useState } from "react";
+import { Suspense, FormEvent, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
@@ -10,7 +10,7 @@ import { Footer } from "@/components/layout/Footer";
 import { DancingButton } from "@/components/primitives/DancingButton";
 import { useLocale } from "@/lib/i18n/LocaleProvider";
 import { useAuth } from "@/lib/auth/AuthProvider";
-import { safeNext } from "@/lib/auth/redirect";
+import { resolveReturnUrl, clearReturnUrl } from "@/lib/auth/redirect";
 import { ApiError, parentApi, setParentToken } from "@/lib/api/client";
 
 export default function LoginPage() {
@@ -27,8 +27,15 @@ function LoginInner() {
   const { t } = useLocale();
   const router = useRouter();
   const search = useSearchParams();
-  const { login } = useAuth();
-  const nextUrl = safeNext(search?.get("next"));
+  const { login, isAuthenticated, isLoading: authLoading } = useAuth();
+  const nextUrl = resolveReturnUrl(search?.get("next"));
+
+  // Already logged in — go back to where they were (dashboard, chat, etc.)
+  useEffect(() => {
+    if (!authLoading && isAuthenticated) {
+      router.replace(nextUrl);
+    }
+  }, [authLoading, isAuthenticated, nextUrl, router]);
 
   const [role, setRole] = useState<Role | null>(null);
   const [email, setEmail] = useState("");
@@ -52,6 +59,7 @@ function LoginInner() {
     try {
       if (role === "child") {
         await login(email, password);
+        clearReturnUrl();
         router.push(nextUrl);
       } else {
         const res = await parentApi.login({ email, password });

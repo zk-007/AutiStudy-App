@@ -35,11 +35,16 @@ BOOK_MAP: Dict[Tuple[int, str], str] = {
     (6, "Computer Science"): "Grade 6/comp/comp_6.md",
     (7, "General Science"):  "Grade 7/gs/gs_7.md",
     (7, "Computer Science"): "Grade 7/comp/comp_7.md",
+    (7, "Maths"):            "Grade 7/math/math_parse_7.md",
 }
 
 # ── Heading patterns ───────────────────────────────────────────────────────────
 # Each pattern: group 1 = number string, group 2 = inline title (may be empty)
 _PATTERNS = [
+    # Grade 7 Maths: "# CHAPTER 8 ALGEBRAIC EXPRESSIONS"
+    re.compile(r"^#\s+CHAPTER\s+0*(\d+)[:\s]*(.*)$", re.IGNORECASE),
+    # Grade 7 Maths: "CHAPTER 1" / "CHAPTER 11"
+    re.compile(r"^CHAPTER\s+0*(\d+)\s*$", re.IGNORECASE),
     # "# Chapter 01: Heat"  or  "# Chapter 5 Fractions"  or  "# Chapter 01"
     re.compile(r"^#{1,3}\s+Chapter\s+0*(\d+)[:\s]*(.*)$", re.IGNORECASE),
     # "# Unit 1 Whole Numbers"  or  "## Unit 3 Fractions"  or  "# Unit 5"
@@ -55,8 +60,118 @@ _PATTERNS = [
 ]
 
 
+_CHAPTER_ONLY = re.compile(r"^CHAPTER\s*$", re.IGNORECASE)
+_CHAPTER_ICON = re.compile(r"^Chapter\s+0*(\d+)\s+icon", re.IGNORECASE)
+_SKIP_TITLE_PREFIXES = ("Student Learning", "After studying", "Animation ")
+
+
+def _resolve_chapter_title(lines: List[str], start_idx: int, num: int, title: str) -> str:
+    """Fill in a chapter title when the heading line has none (Grade 7 style)."""
+    if title and not title.isdigit():
+        return title
+
+    j = start_idx + 1
+    while j < len(lines) and j < start_idx + 10:
+        cand = lines[j].strip()
+        if not cand or _CHAPTER_ONLY.match(cand):
+            j += 1
+            continue
+        if _CHAPTER_ICON.match(cand):
+            j += 1
+            continue
+        if cand.startswith("#"):
+            candidate = cand.lstrip("#").strip()
+            if candidate.isdigit():
+                j += 1
+                continue
+            if candidate and len(candidate) < 120 and not candidate.startswith("*"):
+                if not any(candidate.startswith(p) for p in _SKIP_TITLE_PREFIXES):
+                    return candidate
+        elif (
+            cand.isupper()
+            and 2 < len(cand) < 80
+            and not cand.startswith("*")
+            and not any(cand.startswith(p) for p in _SKIP_TITLE_PREFIXES)
+        ):
+            return cand
+        j += 1
+
+    return title if title and not title.isdigit() else f"Chapter {num}"
+
+
+def _parse_chapter_block(lines: List[str], start_idx: int) -> Optional[Dict]:
+    """Parse Grade 7 blocks that start with a bare 'CHAPTER' line."""
+    num: Optional[int] = None
+    title = ""
+    j = start_idx + 1
+
+    while j < len(lines) and j < start_idx + 12:
+        cand = lines[j].strip()
+        if not cand:
+            j += 1
+            continue
+        if _CHAPTER_ONLY.match(cand):
+            break
+
+        icon = _CHAPTER_ICON.match(cand)
+        if icon:
+            num = int(icon.group(1))
+            j += 1
+            continue
+
+        m_num_title = re.match(r"^#\s+0*(\d+)\s+(.+)$", cand)
+        if m_num_title:
+            num = int(m_num_title.group(1))
+            title = m_num_title.group(2).strip()
+            break
+
+        m_hash_num = re.match(r"^#\s+0*(\d+)\s*$", cand)
+        if m_hash_num and num is None:
+            num = int(m_hash_num.group(1))
+            j += 1
+            continue
+
+        m_plain_num = re.match(r"^0*(\d+)\s*$", cand)
+        if m_plain_num and num is None:
+            num = int(m_plain_num.group(1))
+            j += 1
+            continue
+
+        if cand.startswith("#"):
+            candidate = cand.lstrip("#").strip()
+            if candidate and not candidate.isdigit() and len(candidate) < 120:
+                if not any(candidate.startswith(p) for p in _SKIP_TITLE_PREFIXES):
+                    title = candidate
+                    if num is not None:
+                        break
+        elif (
+            cand.isupper()
+            and 2 < len(cand) < 80
+            and not cand.startswith("*")
+            and not any(cand.startswith(p) for p in _SKIP_TITLE_PREFIXES)
+        ):
+            title = cand
+            if num is not None:
+                break
+        j += 1
+
+    if num is None:
+        return None
+    return {"number": num, "title": title or f"Chapter {num}", "start_line": start_idx}
+
+
+_SUBJECT_ALIASES = {
+    "Computer": "Computer Science",
+}
+
+
+def normalize_book_subject(subject: str) -> str:
+    """Map API subject labels to BOOK_MAP keys."""
+    return _SUBJECT_ALIASES.get(subject, subject)
+
+
 def _get_book_path(grade: int, subject: str) -> Optional[Path]:
-    key = (grade, subject)
+    key = (grade, normalize_book_subject(subject))
     rel = BOOK_MAP.get(key)
     if rel is None:
         return None
@@ -64,7 +179,7 @@ def _get_book_path(grade: int, subject: str) -> Optional[Path]:
     return p if p.exists() else None
 
 
-def _parse_chapters(text: str) -> List[Dict]:
+def _parse_chapters(text: str, min_start_line: int = 100) -> List[Dict]:
     """
     Return a list of dicts:
       { "number": int, "title": str, "start_line": int, "end_line": int }
@@ -79,25 +194,20 @@ def _parse_chapters(text: str) -> List[Dict]:
     i = 0
     while i < len(lines):
         line = lines[i].rstrip()
+
+        if _CHAPTER_ONLY.match(line):
+            block = _parse_chapter_block(lines, i)
+            if block:
+                hits.append(block)
+            i += 1
+            continue
+
         for pat in _PATTERNS:
             m = pat.match(line)
             if m:
                 num = int(m.group(1))
-                # Try inline title first
                 title = m.group(2).strip() if len(m.groups()) >= 2 else ""
-                # If no inline title, grab the next non-blank heading line
-                if not title:
-                    j = i + 1
-                    while j < len(lines) and not lines[j].strip():
-                        j += 1
-                    if j < len(lines):
-                        candidate = lines[j].lstrip("#").strip()
-                        # Accept as title if it looks like a proper title
-                        # (not too long, not a bullet, not a number-only line)
-                        if candidate and len(candidate) < 120 and not candidate.startswith(("*", "-", "1.", "2.")):
-                            title = candidate
-                if not title:
-                    title = f"Chapter {num}"
+                title = _resolve_chapter_title(lines, i, num, title)
                 hits.append({"number": num, "title": title, "start_line": i})
                 break
         i += 1
@@ -105,9 +215,7 @@ def _parse_chapters(text: str) -> List[Dict]:
     if not hits:
         return []
 
-    # Filter out false positives that appear in the first 100 lines (title pages,
-    # cover descriptions, etc.).  Real chapters always start deeper in the file.
-    hits = [h for h in hits if h["start_line"] >= 100]
+    hits = [h for h in hits if h["start_line"] >= min_start_line]
 
     if not hits:
         return []
@@ -128,17 +236,47 @@ def _parse_chapters(text: str) -> List[Dict]:
     return unique
 
 
+def format_book_units_list(
+    grade: int,
+    subject: str,
+    language: str = "en",
+    max_items: int = 24,
+) -> str:
+    """Format chapter/unit titles from the textbook for off-topic tutor replies."""
+    chapters = get_chapters(grade, subject)
+    if not chapters:
+        return ""
+
+    heading = (
+        f"Grade {grade} {subject} book topics:"
+        if language == "en"
+        else f"جماعت {grade} {subject} کتاب کے موضوعات:"
+    )
+    lines = [heading]
+    for ch in chapters[:max_items]:
+        lines.append(f"  {ch['number']}. {ch['title']}")
+    if len(chapters) > max_items:
+        extra = len(chapters) - max_items
+        if language == "en":
+            lines.append(f"  … and {extra} more")
+        else:
+            lines.append(f"  … اور {extra} مزید")
+    return "\n".join(lines)
+
+
 def get_chapters(grade: int, subject: str) -> Optional[List[Dict]]:
     """
     Public API: return a list of chapter dicts for this grade+subject,
     each with keys: number (int), title (str).
     Returns None if no book file found.
     """
+    subject = normalize_book_subject(subject)
     path = _get_book_path(grade, subject)
     if path is None:
         return None
     text = path.read_text(encoding="utf-8", errors="ignore")
-    chapters = _parse_chapters(text)
+    min_start = 0 if grade == 7 and subject == "Maths" else 100
+    chapters = _parse_chapters(text, min_start_line=min_start)
     # Clean up titles: remove HTML artifacts and sort by chapter number
     cleaned = []
     for ch in chapters:
@@ -160,7 +298,8 @@ def get_chapter_content(grade: int, subject: str, chapter_number: int, max_chars
     if path is None:
         return None
     text = path.read_text(encoding="utf-8", errors="ignore")
-    chapters = _parse_chapters(text)
+    min_start = 0 if grade == 7 and subject == "Maths" else 100
+    chapters = _parse_chapters(text, min_start_line=min_start)
 
     target = next((ch for ch in chapters if ch["number"] == chapter_number), None)
     if target is None:

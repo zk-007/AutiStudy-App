@@ -1,0 +1,292 @@
+{
+  "system_under_test": "RAT (Retrieval-Augmented Thought) \u2014 utils/rag.py",
+  "metrics": {
+    "solution_correctness": "Fraction of gold items whose final answer matches expected",
+    "step_accuracy": "Fraction of CoT steps verified without correction"
+  },
+  "by_grade": {
+    "4": {
+      "grade": 4,
+      "items_evaluated": 5,
+      "solution_correctness": 1.0,
+      "solution_correctness_pct": 100.0,
+      "step_accuracy": 0.8125,
+      "step_accuracy_pct": 81.2,
+      "items": [
+        {
+          "id": "g4_01",
+          "query": "Find the LCM of 6 and 8",
+          "expected_answer": "24",
+          "predicted_answer": "24",
+          "solution_correct": true,
+          "step_total": 12,
+          "step_correct": 10,
+          "step_accuracy": 0.8333,
+          "elapsed_s": 32.3
+        },
+        {
+          "id": "g4_02",
+          "query": "Convert 3 meters into centimeters",
+          "expected_answer": "300",
+          "predicted_answer": "300",
+          "solution_correct": true,
+          "step_total": 14,
+          "step_correct": 12,
+          "step_accuracy": 0.8571,
+          "elapsed_s": 22.5
+        },
+        {
+          "id": "g4_03",
+          "query": "What is 12 multiplied by 8?",
+          "expected_answer": "96",
+          "predicted_answer": "96",
+          "solution_correct": true,
+          "step_total": 13,
+          "step_correct": 10,
+          "step_accuracy": 0.7692,
+          "elapsed_s": 25.8
+        },
+        {
+          "id": "g4_04",
+          "query": "Find 84 divided by 7",
+          "expected_answer": "12",
+          "predicted_answer": "12",
+          "solution_correct": true,
+          "step_total": 12,
+          "step_correct": 10,
+          "step_accuracy": 0.8333,
+          "elapsed_s": 17.5
+        },
+        {
+          "id": "g4_05",
+          "query": "Add 245 and 378",
+          "expected_answer": "623",
+          "predicted_answer": "623",
+          "solution_correct": true,
+          "step_total": 13,
+          "step_correct": 10,
+          "step_accuracy": 0.7692,
+          "elapsed_s": 18.3
+        }
+      ]
+    },
+    "5": {
+      "grade": 5,
+      "items_evaluated": 5,
+      "solution_correctness": 1.0,
+      "solution_correctness_pct": 100.0,
+      "step_accuracy": 0.7705,
+      "step_accuracy_pct": 77.0,
+      "items": [
+        {
+          "id": "g5_01",
+          "query": "Add 1/4 and 1/2",
+          "expected_answer": "3/4",
+          "predicted_answer": "\\(\\frac{3}{4}\\)",
+          "solution_correct": true,
+          "step_total": 10,
+          "step_correct": 7,
+          "step_accuracy": 0.7,
+          "elapsed_s": 21.7
+        },
+        {
+          "id": "g5_02",
+          "query": "What is 0.5 plus 0.25?",
+          "expected_answer": "0.75",
+          "predicted_answer": "0.75",
+          "solution_correct": true,
+          "step_total": 11,
+          "step_correct": 8,
+          "step_accuracy": 0.7273,
+          "elapsed_s": 21.3
+        },
+        {
+          "id": "g5_03",
+          "query": "Multiply 15 by 12",
+          "expected_answer": "180",
+          "predicted_answer": "180",
+          "solution_correct": true,
+          "step_total": 17,
+          "step_correct": 15,
+          "step_accuracy": 0.8824,
+          "elapsed_s": 23.2
+        },
+        {
+          "id": "g5_04",
+          "query": "Find 144 divided by 12",
+          "expected_answer": "12",
+          "predicted_answer": "12",
+          "solution_correct": true,
+          "step_total": 9,
+          "step_correct": 8,
+          "step_accuracy": 0.8889,
+          "elapsed_s": 15.5
+        },
+        {
+          "id": "g5_05",
+          "query": "Subtract 47 from 100",
+          "expected_answer": "53",
+          "predicted_answer": "53",
+          "solution_correct": true,
+          "step_total": 14,
+          "step_correct": 9,
+          "step_accuracy": 0.6429,
+          "elapsed_s": 24.1
+        }
+      ]
+    },
+    "6": {
+      "grade": 6,
+      "items_evaluated": 5,
+      "solution_correctness": 1.0,
+      "solution_correctness_pct": 100.0,
+      "step_accuracy": 0.9524,
+      "step_accuracy_pct": 95.2,
+      "items": [
+        {
+          "id": "g6_01",
+          "query": "Simplify the ratio 12:18",
+          "expected_answer": "2:3",
+          "predicted_answer": "2:3",
+          "solution_correct": true,
+          "step_total": 9,
+          "step_correct": 8,
+          "step_accuracy": 0.8889,
+          "elapsed_s": 12.6
+        },
+        {
+          "id": "g6_02",
+          "query": "What is 25 percent of 80?",
+          "expected_answer": "20",
+          "predicted_answer": "20",
+          "solution_correct": true,
+          "step_total": 12,
+          "step_correct": 12,
+          "step_accuracy": 1.0,
+          "elapsed_s": 24.5
+        },
+        {
+          "id": "g6_03",
+          "query": "Find the value of 5 squared plus 3 squared",
+          "expected_answer": "34",
+          "predicted_answer": "34",
+          "solution_correct": true,
+          "step_total": 15,
+          "step_correct": 13,
+          "step_accuracy": 0.8667,
+          "elapsed_s": 24.6
+        },
+        {
+          "id": "g6_04",
+          "query": "Multiply 2/3 by 3/4",
+          "expected_answer": "1/2",
+          "predicted_answer": "\\(\\frac{1}{2}\\)",
+          "solution_correct": true,
+          "step_total": 14,
+          "step_correct": 14,
+          "step_accuracy": 1.0,
+          "elapsed_s": 24.4
+        },
+        {
+          "id": "g6_05",
+          "query": "What is the HCF of 18 and 24?",
+          "expected_answer": "6",
+          "predicted_answer": "6",
+          "solution_correct": true,
+          "step_total": 13,
+          "step_correct": 13,
+          "step_accuracy": 1.0,
+          "elapsed_s": 20.4
+        }
+      ]
+    },
+    "7": {
+      "grade": 7,
+      "items_evaluated": 5,
+      "solution_correctness": 1.0,
+      "solution_correctness_pct": 100.0,
+      "step_accuracy": 0.963,
+      "step_accuracy_pct": 96.3,
+      "items": [
+        {
+          "id": "g7_01",
+          "query": "Add -5 and 8",
+          "expected_answer": "3",
+          "predicted_answer": "3",
+          "solution_correct": true,
+          "step_total": 10,
+          "step_correct": 10,
+          "step_accuracy": 1.0,
+          "elapsed_s": 15.5
+        },
+        {
+          "id": "g7_02",
+          "query": "Multiply -3 by 4",
+          "expected_answer": "-12",
+          "predicted_answer": "-12",
+          "solution_correct": true,
+          "step_total": 9,
+          "step_correct": 9,
+          "step_accuracy": 1.0,
+          "elapsed_s": 11.9
+        },
+        {
+          "id": "g7_03",
+          "query": "What is 2/5 plus 1/5?",
+          "expected_answer": "3/5",
+          "predicted_answer": "\\(\\frac{3}{5}\\)",
+          "solution_correct": true,
+          "step_total": 12,
+          "step_correct": 12,
+          "step_accuracy": 1.0,
+          "elapsed_s": 20.6
+        },
+        {
+          "id": "g7_04",
+          "query": "Find 15 percent of 200",
+          "expected_answer": "30",
+          "predicted_answer": "30",
+          "solution_correct": true,
+          "step_total": 13,
+          "step_correct": 13,
+          "step_accuracy": 1.0,
+          "elapsed_s": 21.0
+        },
+        {
+          "id": "g7_05",
+          "query": "What is the square root of 144?",
+          "expected_answer": "12",
+          "predicted_answer": "12",
+          "solution_correct": true,
+          "step_total": 10,
+          "step_correct": 8,
+          "step_accuracy": 0.8,
+          "elapsed_s": 16.4
+        }
+      ]
+    }
+  },
+  "summary_table": [
+    {
+      "grade": 4,
+      "solution_correctness_pct": 100.0,
+      "step_accuracy_pct": 81.2
+    },
+    {
+      "grade": 5,
+      "solution_correctness_pct": 100.0,
+      "step_accuracy_pct": 77.0
+    },
+    {
+      "grade": 6,
+      "solution_correctness_pct": 100.0,
+      "step_accuracy_pct": 95.2
+    },
+    {
+      "grade": 7,
+      "solution_correctness_pct": 100.0,
+      "step_accuracy_pct": 96.3
+    }
+  ],
+  "elapsed_s": 414.2
+}

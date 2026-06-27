@@ -68,6 +68,136 @@ function StatCard({
   );
 }
 
+// ─── Donut: correct vs wrong ──────────────────────────────────────────────────
+function DonutChart({ correct, wrong }: { correct: number; wrong: number }) {
+  const total = correct + wrong;
+  if (total === 0) {
+    return (
+      <div className="flex flex-col items-center justify-center py-8 text-deep-soft text-sm">
+        Take a quiz to see your score breakdown
+      </div>
+    );
+  }
+  const pct = Math.round((correct / total) * 100);
+  const r = 48;
+  const cx = 60;
+  const cy = 60;
+  const stroke = 14;
+  const circ = 2 * Math.PI * r;
+  const dash = (correct / total) * circ;
+
+  return (
+    <div className="flex flex-col items-center gap-3">
+      <svg width={120} height={120}>
+        <defs>
+          <linearGradient id="analytics-donut" x1="0%" y1="0%" x2="100%" y2="0%">
+            <stop offset="0%" stopColor="#10b981" />
+            <stop offset="100%" stopColor="#06b6d4" />
+          </linearGradient>
+        </defs>
+        <circle cx={cx} cy={cy} r={r} fill="none" stroke="#e2f0f9" strokeWidth={stroke} />
+        <motion.circle
+          cx={cx}
+          cy={cy}
+          r={r}
+          fill="none"
+          stroke="url(#analytics-donut)"
+          strokeWidth={stroke}
+          strokeLinecap="round"
+          strokeDasharray={circ}
+          initial={{ strokeDashoffset: circ }}
+          animate={{ strokeDashoffset: circ - dash }}
+          transition={{ duration: 1, ease: "easeOut" }}
+          transform={`rotate(-90 ${cx} ${cy})`}
+        />
+        <text x={cx} y={cy - 6} textAnchor="middle" fontSize={18} fill="#1e293b" fontWeight={700}>
+          {pct}%
+        </text>
+        <text x={cx} y={cy + 12} textAnchor="middle" fontSize={10} fill="#64748b">
+          correct
+        </text>
+      </svg>
+      <div className="flex gap-4 text-sm">
+        <div className="flex items-center gap-1.5">
+          <div className="h-3 w-3 rounded-full bg-gradient-to-r from-emerald-500 to-cyan-500" />
+          <span className="font-bold text-deep">{correct}</span>
+          <span className="text-deep-soft">correct</span>
+        </div>
+        <div className="flex items-center gap-1.5">
+          <div className="h-3 w-3 rounded-full bg-rose-300" />
+          <span className="font-bold text-deep">{wrong}</span>
+          <span className="text-deep-soft">wrong</span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Performance trend (line chart) ───────────────────────────────────────────
+function PerformanceTrend({ trend }: { trend: AnalyticsData["performance_trend"] }) {
+  if (!trend.length) {
+    return (
+      <div className="flex items-center justify-center py-8 text-deep-soft text-sm">
+        Complete a few quizzes to see your improvement trend
+      </div>
+    );
+  }
+
+  const W = 280;
+  const H = 100;
+  const pad = 14;
+  const xStep = trend.length > 1 ? (W - pad * 2) / (trend.length - 1) : 0;
+  const pts = trend.map((d, i) => ({
+    x: pad + i * xStep,
+    y: H - pad - (d.accuracy / 100) * (H - pad * 2),
+    ...d,
+  }));
+  const poly = pts.map((p) => `${p.x},${p.y}`).join(" ");
+  const area =
+    pts.map((p, i) => `${i === 0 ? `M${p.x},${H - pad}` : ""} L${p.x},${p.y}`).join(" ") +
+    ` L${pts[pts.length - 1].x},${H - pad} Z`;
+
+  return (
+    <svg viewBox={`0 0 ${W} ${H}`} className="w-full" preserveAspectRatio="none" style={{ height: 100 }}>
+      <defs>
+        <linearGradient id="analytics-trend" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor="#0ea5e9" stopOpacity={0.25} />
+          <stop offset="100%" stopColor="#0ea5e9" stopOpacity={0} />
+        </linearGradient>
+      </defs>
+      {[25, 50, 75].map((v) => {
+        const y = H - pad - (v / 100) * (H - pad * 2);
+        return <line key={v} x1={pad} y1={y} x2={W - pad} y2={y} stroke="#e2f0f9" strokeWidth={1} />;
+      })}
+      <path d={area} fill="url(#analytics-trend)" />
+      <motion.polyline
+        points={poly}
+        fill="none"
+        stroke="#0ea5e9"
+        strokeWidth={2.5}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        initial={{ pathLength: 0 }}
+        animate={{ pathLength: 1 }}
+        transition={{ duration: 1.2 }}
+      />
+      {pts.map((p, i) => (
+        <g key={i}>
+          <circle cx={p.x} cy={p.y} r={4} fill="white" stroke="#0ea5e9" strokeWidth={2} />
+          <title>{`${p.subject}: ${Math.round(p.accuracy)}%`}</title>
+        </g>
+      ))}
+      {pts
+        .filter((_, i) => i === 0 || i === pts.length - 1)
+        .map((p, i) => (
+          <text key={i} x={p.x} y={H - 1} textAnchor="middle" fontSize={8} fill="#94a3b8">
+            {p.date.slice(5)}
+          </text>
+        ))}
+    </svg>
+  );
+}
+
 // ─── Activity Bar Chart ───────────────────────────────────────────────────────
 const BAR_AREA_H = 96; // px — fixed height of the bar area above the labels
 
@@ -115,7 +245,6 @@ function ActivityChart({ activity }: { activity: AnalyticsData["daily_activity"]
 // ─── Subject Breakdown ────────────────────────────────────────────────────────
 function SubjectBreakdown({ breakdown }: { breakdown: AnalyticsData["subject_breakdown"] }) {
   const entries = Object.entries(breakdown);
-  if (entries.length === 0) return null;
 
   return (
     <div className="rounded-2xl bg-white/80 border border-glacier-100 shadow-sm px-5 py-5">
@@ -123,6 +252,11 @@ function SubjectBreakdown({ breakdown }: { breakdown: AnalyticsData["subject_bre
         <TrendingUp size={18} className="text-glacier-500" />
         <h3 className="font-display text-sm font-bold text-deep">By Subject</h3>
       </div>
+      {entries.length === 0 ? (
+        <p className="text-sm text-deep-soft py-6 text-center">
+          Subject charts appear after you take quizzes in Maths, Science, or CS.
+        </p>
+      ) : (
       <div className="space-y-4">
         {entries.map(([sub, stats]) => {
           const { color, bar, icon: Icon } = subjectStyle(sub);
@@ -149,20 +283,22 @@ function SubjectBreakdown({ breakdown }: { breakdown: AnalyticsData["subject_bre
           );
         })}
       </div>
+      )}
     </div>
   );
 }
 
 // ─── Recent Attempts ──────────────────────────────────────────────────────────
 function RecentAttempts({ attempts }: { attempts: AnalyticsData["recent_attempts"] }) {
-  if (attempts.length === 0) return null;
-
   return (
     <div className="rounded-2xl bg-white/80 border border-glacier-100 shadow-sm px-5 py-5">
       <div className="flex items-center gap-2 mb-4">
         <Clock size={18} className="text-glacier-500" />
         <h3 className="font-display text-sm font-bold text-deep">Recent Quizzes</h3>
       </div>
+      {attempts.length === 0 ? (
+        <p className="text-sm text-deep-soft py-6 text-center">No quizzes yet — your history will show here.</p>
+      ) : (
       <div className="space-y-3">
         {attempts.slice(0, 8).map((a, i) => {
           const { icon: Icon, color } = subjectStyle(a.subject);
@@ -192,6 +328,7 @@ function RecentAttempts({ attempts }: { attempts: AnalyticsData["recent_attempts
           );
         })}
       </div>
+      )}
     </div>
   );
 }
@@ -313,10 +450,29 @@ export default function AnalyticsPage() {
                 <StatCard icon={Flame} label="Day Streak" value={data.streak_days} gradient="from-amber-500 to-orange-500" delay={0.21} />
               </div>
 
-              {/* Activity chart */}
-              {data.daily_activity.length > 0 && (
-                <ActivityChart activity={data.daily_activity} />
-              )}
+              {/* Charts row */}
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <div className="rounded-2xl bg-white/80 border border-glacier-100 shadow-sm px-5 py-5">
+                  <div className="flex items-center gap-2 mb-2">
+                    <Target size={18} className="text-emerald-500" />
+                    <h3 className="font-display text-sm font-bold text-deep">Score Breakdown</h3>
+                  </div>
+                  <DonutChart
+                    correct={data.total_correct}
+                    wrong={Math.max(0, data.total_questions - data.total_correct)}
+                  />
+                </div>
+                <div className="rounded-2xl bg-white/80 border border-glacier-100 shadow-sm px-5 py-5">
+                  <div className="flex items-center gap-2 mb-2">
+                    <TrendingUp size={18} className="text-sky-500" />
+                    <h3 className="font-display text-sm font-bold text-deep">Accuracy Trend (last quizzes)</h3>
+                  </div>
+                  <PerformanceTrend trend={data.performance_trend ?? []} />
+                </div>
+              </div>
+
+              {/* Daily activity */}
+              <ActivityChart activity={data.daily_activity} />
 
               {/* Two column: subject breakdown + recent attempts */}
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">

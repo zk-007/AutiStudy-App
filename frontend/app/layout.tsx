@@ -3,6 +3,7 @@ import { Quicksand, Inter } from "next/font/google";
 import "./globals.css";
 import { LocaleProvider } from "@/lib/i18n/LocaleProvider";
 import { AuthProvider } from "@/lib/auth/AuthProvider";
+import { RoutePersistence } from "@/components/auth/RoutePersistence";
 import { SmoothScrollProvider } from "@/components/primitives/SmoothScrollProvider";
 import { Aurora } from "@/components/primitives/Aurora";
 import { SettingsProvider } from "@/lib/settings/SettingsContext";
@@ -40,6 +41,7 @@ export default function RootLayout({
         <LocaleProvider>
           <SettingsProvider>
             <AuthProvider>
+              <RoutePersistence />
               <SmoothScrollProvider>
                 <Aurora />
                 {children}

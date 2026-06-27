@@ -1,7 +1,0 @@
-﻿{
-    "label":  "v4.1-adaptive-agent",
-    "git_commit":  "4d14ca1",
-    "saved_at":  "2026-06-01",
-    "tag":  "latest",
-    "notes":  "Next.js frontend with hybrid CV, popup-gated comprehension ladder, MCQs, breathing, expression-lab"
-}

@@ -39,6 +39,7 @@ import {
   X,
   Star,
   RotateCcw,
+  ClipboardList,
 } from "lucide-react";
 import { NavBar } from "@/components/layout/NavBar";
 import { useLocale } from "@/lib/i18n/LocaleProvider";
@@ -66,6 +67,7 @@ import {
   type ChatMessage,
   type Subject,
   type QuizQuestion,
+  type SessionRecapResponse,
 } from "@/lib/api/client";
 
 export default function ChatPage() {
@@ -298,6 +300,10 @@ function Conversation({ sessionId }: { sessionId: string }) {
     topic_summary: string;
     subject: string;
   } | null>(null);
+  const [recapOpen, setRecapOpen] = useState(false);
+  const [recapLoading, setRecapLoading] = useState(false);
+  const [recapError, setRecapError] = useState<string | null>(null);
+  const [recapData, setRecapData] = useState<SessionRecapResponse | null>(null);
 
   // ── Adaptive Tutor Agent (NEW — real-time, probability-based) ────────────
   // Use refs for values that feed into learningSignals to avoid circular deps
@@ -469,6 +475,7 @@ function Conversation({ sessionId }: { sessionId: string }) {
   } = useComprehensionFlow({
     sessionId,
     subject: session?.subject ?? "General",
+    studentEmail: user?.email ?? null,
     hybridScores: adaptiveState.teachingEmotion?.hybridScores ?? null,
     hybridDominant: adaptiveState.teachingEmotion?.hybridDominant ?? null,
     cameraEnabled: adaptiveState.cameraEnabled,
@@ -587,8 +594,6 @@ function Conversation({ sessionId }: { sessionId: string }) {
         return;
       }
 
-      flowOnStudentQuestion();
-      agentOnStudentNewMessage();
       setSending(true);
       setSendError(null);
 
@@ -605,17 +610,25 @@ function Conversation({ sessionId }: { sessionId: string }) {
       setDraft("");
 
       try {
-        // Ask the agent what format to use BEFORE sending (proactive decision)
         const preferredFormat = agentGetPreferredFormat();
         const reply = await chatApi.send(sessionId, content, preferredFormat);
+        const onTopic = reply.is_relevant !== false && !reply.assistant_message.skip_tutor;
         setSession((prev) => {
           if (!prev) return prev;
           const next = [...prev.messages];
           if (reply.user_message) next[next.length - 1] = reply.user_message;
           next.push(reply.assistant_message);
-          return { ...prev, messages: next };
+          return {
+            ...prev,
+            messages: next,
+            timestamp: reply.session.timestamp ?? prev.timestamp,
+          };
         });
-        flowOnAssistantAnswerRef.current();
+        if (onTopic) {
+          agentOnStudentNewMessage();
+          flowOnStudentQuestion();
+          flowOnAssistantAnswerRef.current();
+        }
       } catch (err) {
         // Roll back optimistic message and surface the error.
         setSession((prev) =>
@@ -718,6 +731,26 @@ function Conversation({ sessionId }: { sessionId: string }) {
     setChatQuizError(null);
     onOpenChatQuiz();
   }, [onOpenChatQuiz]);
+
+  const onOpenRecap = useCallback(async () => {
+    if (!sessionId) return;
+    setRecapOpen(true);
+    setRecapLoading(true);
+    setRecapError(null);
+    try {
+      const res = await chatApi.getRecap(sessionId);
+      setRecapData(res);
+    } catch (err) {
+      setRecapData(null);
+      setRecapError(err instanceof ApiError ? err.detail : "Could not load recap. Please try again.");
+    } finally {
+      setRecapLoading(false);
+    }
+  }, [sessionId]);
+
+  const onCloseRecap = useCallback(() => {
+    setRecapOpen(false);
+  }, []);
 
   // ── Read-aloud (TTS) ──────────────────────────────────────────────────────
   // Streams base64 MP3 from the API into an in-memory <audio> element so we
@@ -827,7 +860,33 @@ function Conversation({ sessionId }: { sessionId: string }) {
       onStart={agentStartCamera}
       onStop={agentStopCamera}
     />
-    <div className="flex-1 flex flex-col rounded-3xl glass-strong shadow-soft overflow-hidden">
+    {/* Recap + Quiz modals use fixed positioning (outside overflow-hidden panel) */}
+    <AnimatePresence>
+      {recapOpen && (
+        <RecapModal
+          loading={recapLoading}
+          error={recapError}
+          data={recapData}
+          subject={session?.subject ?? ""}
+          onClose={onCloseRecap}
+          onRefresh={onOpenRecap}
+        />
+      )}
+    </AnimatePresence>
+    <AnimatePresence>
+      {chatQuizOpen && session && (
+        <ChatQuizModal
+          loading={chatQuizLoading}
+          error={chatQuizError}
+          data={chatQuizData}
+          subject={session.subject ?? ""}
+          sessionId={sessionId}
+          onClose={onCloseChatQuiz}
+          onRetake={onRetakeChatQuiz}
+        />
+      )}
+    </AnimatePresence>
+    <div className="relative flex-1 flex flex-col rounded-3xl glass-strong shadow-soft overflow-hidden">
       {/* Header: subject + tutor-configured banner if applicable. */}
       <div className="flex items-center gap-3 px-6 py-4 border-b border-white/40">
         <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-glacier-200 to-glacier-300 text-xl">
@@ -841,6 +900,17 @@ function Conversation({ sessionId }: { sessionId: string }) {
             {t.pages.dashboard.gradeLabel} {session.grade}
           </div>
         </div>
+        {/* Recap — always available for this chat session */}
+        <motion.button
+          whileHover={{ scale: 1.04 }}
+          whileTap={{ scale: 0.97 }}
+          onClick={onOpenRecap}
+          className="flex items-center gap-2 rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 px-4 py-2 text-sm font-bold text-white shadow-md hover:shadow-lg transition-all flex-shrink-0 ring-2 ring-amber-300/60"
+          title="See what you learned in this chat"
+        >
+          <ClipboardList size={16} />
+          <span className="hidden sm:inline">Recap</span>
+        </motion.button>
         {/* Take a Quiz button — only show when there's enough chat history */}
         {session.messages.length >= 4 && (
           <motion.button
@@ -857,21 +927,6 @@ function Conversation({ sessionId }: { sessionId: string }) {
           </motion.button>
         )}
       </div>
-
-      {/* Chat Quiz Modal */}
-      <AnimatePresence>
-        {chatQuizOpen && (
-          <ChatQuizModal
-            loading={chatQuizLoading}
-            error={chatQuizError}
-            data={chatQuizData}
-            subject={session.subject ?? ""}
-            sessionId={sessionId}
-            onClose={onCloseChatQuiz}
-            onRetake={onRetakeChatQuiz}
-          />
-        )}
-      </AnimatePresence>
 
       {config?.tutor_configured === false && (
         <div className="px-4 md:px-6 pt-4">
@@ -911,12 +966,13 @@ function Conversation({ sessionId }: { sessionId: string }) {
               // area keeps the UI calm and avoids accidental cost spikes.
               const isLastAssistant =
                 m.role === "assistant" && i === session.messages.length - 1;
+              const showTutorActions = isLastAssistant && !m.skip_tutor;
               return (
                 <div key={`${i}-${m.timestamp}`}>
                   <Bubble
                     index={i}
                     message={m}
-                    showActions={isLastAssistant}
+                    showActions={showTutorActions}
                     imagesAvailable={!!config?.images_available}
                     speechAvailable={!!config?.speech_available}
                     onGenerateImage={onGenerateImage}
@@ -951,7 +1007,7 @@ function Conversation({ sessionId }: { sessionId: string }) {
                     <UnderstandingCheck
                       key={`popup-${comprehensionFlow.adaptationRound}-${comprehensionFlow.popupStartedAt}`}
                       popupKey={`${comprehensionFlow.adaptationRound}-${comprehensionFlow.popupStartedAt}`}
-                      agentTried={comprehensionFlow.adaptationRound > 0}
+                      agentTried={comprehensionFlow.adaptationStepsTaken > 0}
                       typingBlocked={comprehensionFlow.typingBlocked}
                       popupDancing={comprehensionFlow.popupDancing}
                       cvHappyMode={comprehensionFlow.cvHappyMode}
@@ -1004,8 +1060,8 @@ function Conversation({ sessionId }: { sessionId: string }) {
               : comprehensionFlow.pendingPopup && comprehensionFlow.popupGate === "scroll"
                 ? "📖 Scroll to the end of the answer — check-in appears after 30 seconds of reading"
                 : comprehensionFlow.showPopup
-                  ? comprehensionFlow.adaptationRound > 0
-                    ? `Help step ${comprehensionFlow.adaptationRound}/5 — please answer the popup 👆`
+                  ? comprehensionFlow.adaptationStepsTaken > 0
+                    ? `Help step ${comprehensionFlow.adaptationStepsTaken}/5 — please answer the popup 👆`
                     : "Please answer “Did you get it?” first 👆"
                   : "Take a breath… then we'll continue 🌿"}
           </div>
@@ -2600,6 +2656,128 @@ function subjectIcon(subject: string | null): string {
   return "📚";
 }
 
+// ─── RecapModal ───────────────────────────────────────────────────────────────
+//
+// Shows key points from the current chat session, or a friendly empty message.
+//
+function RecapModal({
+  loading, error, data, subject, onClose, onRefresh,
+}: {
+  loading: boolean;
+  error: string | null;
+  data: SessionRecapResponse | null;
+  subject: string;
+  onClose: () => void;
+  onRefresh: () => void;
+}) {
+  return (
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40 backdrop-blur-sm p-4"
+      role="dialog"
+      aria-modal="true"
+      aria-label="Session recap"
+      onClick={onClose}
+    >
+      <motion.div
+        initial={{ opacity: 0, y: 40, scale: 0.96 }}
+        animate={{ opacity: 1, y: 0, scale: 1 }}
+        exit={{ opacity: 0, y: 40, scale: 0.96 }}
+        transition={{ duration: 0.3, ease: "easeOut" }}
+        className="relative w-full max-w-md rounded-3xl bg-white shadow-2xl overflow-hidden"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <button
+          onClick={onClose}
+          className="absolute top-4 right-4 z-10 flex h-8 w-8 items-center justify-center rounded-full bg-slate-100 text-slate-500 hover:bg-slate-200"
+          aria-label="Close recap"
+        >
+          <X size={16} />
+        </button>
+
+        <div className="bg-gradient-to-r from-amber-500 to-orange-500 px-6 py-5 text-white">
+          <div className="flex items-center gap-2 text-sm font-semibold opacity-90">
+            <ClipboardList size={18} />
+            Session Recap
+          </div>
+          <h2 className="mt-1 font-display text-xl font-extrabold">
+            {subject || "Your chat"}
+          </h2>
+        </div>
+
+        <div className="px-6 py-5">
+          {loading && (
+            <div className="flex flex-col items-center gap-3 py-8 text-deep-muted">
+              <Loader2 size={28} className="animate-spin text-amber-500" />
+              <p className="text-sm">Building your recap…</p>
+            </div>
+          )}
+
+          {!loading && error && (
+            <div className="space-y-4 py-4">
+              <p className="text-sm text-rose-600">{error}</p>
+              <button
+                onClick={onRefresh}
+                className="rounded-xl bg-amber-500 px-4 py-2 text-sm font-bold text-white"
+              >
+                Try again
+              </button>
+            </div>
+          )}
+
+          {!loading && !error && data?.empty && (
+            <div className="py-6 text-center">
+              <BookOpenCheck size={40} className="mx-auto text-amber-400 mb-3" />
+              <p className="text-deep text-sm leading-relaxed">
+                {data.message || "You haven't learned any lesson in this chat yet. Ask a question first!"}
+              </p>
+            </div>
+          )}
+
+          {!loading && !error && data && !data.empty && (
+            <div className="space-y-4">
+              {data.topic_summary && (
+                <p className="text-sm font-bold text-deep">{data.topic_summary}</p>
+              )}
+              {data.key_points.length > 0 ? (
+                <ul className="space-y-2">
+                  {data.key_points.map((point, i) => (
+                    <li
+                      key={i}
+                      className="flex gap-2 text-sm text-deep leading-snug rounded-xl bg-amber-50 px-3 py-2"
+                    >
+                      <span className="text-amber-600 font-bold flex-shrink-0">•</span>
+                      <span>{point}</span>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="text-sm text-deep-muted">No key points could be extracted from this chat.</p>
+              )}
+              <button
+                onClick={onRefresh}
+                className="flex items-center gap-1.5 text-xs font-semibold text-amber-700 hover:text-amber-900"
+              >
+                <RotateCcw size={14} />
+                Refresh recap
+              </button>
+            </div>
+          )}
+
+          {!loading && !error && !data && (
+            <div className="flex flex-col items-center gap-3 py-8 text-deep-muted">
+              <Loader2 size={28} className="animate-spin text-amber-500" />
+              <p className="text-sm">Loading recap…</p>
+            </div>
+          )}
+        </div>
+      </motion.div>
+    </motion.div>
+  );
+}
+
 // ─── ChatQuizModal ────────────────────────────────────────────────────────────
 //
 // An overlay that slides up from the bottom of the chat panel. It shows a
@@ -2696,7 +2874,10 @@ function ChatQuizModal({
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
-      className="absolute inset-0 z-30 flex items-center justify-center bg-black/40 backdrop-blur-sm rounded-3xl"
+      className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40 backdrop-blur-sm p-4"
+      role="dialog"
+      aria-modal="true"
+      onClick={onClose}
     >
       <motion.div
         initial={{ opacity: 0, y: 40, scale: 0.96 }}
@@ -2704,6 +2885,7 @@ function ChatQuizModal({
         exit={{ opacity: 0, y: 40, scale: 0.96 }}
         transition={{ duration: 0.3, ease: "easeOut" }}
         className="relative w-full max-w-lg mx-4 rounded-3xl bg-white shadow-2xl overflow-hidden max-h-[90vh] overflow-y-auto"
+        onClick={(e) => e.stopPropagation()}
       >
         {/* Close */}
         <button

@@ -1,0 +1,13 @@
+__pycache__
+*.pyc
+.venv
+venv
+.env
+config/secrets.toml
+.streamlit
+Presentation
+Retriever_logic
+docs
+*.ipynb
+temp_generated_images
+.ipynb_checkpoints

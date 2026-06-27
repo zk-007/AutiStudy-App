@@ -89,15 +89,6 @@ export interface AgentState {
   memoryContext: string | null;
 }
 
-const EMOTION_EMOJIS: Record<string, string> = {
-  happy: "😊",
-  focused: "🧐",
-  neutral: "😐",
-  confused: "😕",
-  frustrated: "😣",
-  no_face: "📷",
-};
-
 const CONSENT_KEY = "autistudy_camera_consent"; // localStorage key
 
 export function getCameraConsent(): "granted" | "denied" | "pending" {
@@ -111,23 +102,6 @@ export function getCameraConsent(): "granted" | "denied" | "pending" {
 export function setCameraConsent(value: "granted" | "denied") {
   if (typeof window !== "undefined") {
     localStorage.setItem(CONSENT_KEY, value);
-  }
-}
-
-function _captureFrameAsBase64_UNUSED(
-  video: HTMLVideoElement,
-  quality = 0.7
-): string | null {
-  try {
-    const canvas = document.createElement("canvas");
-    canvas.width = 320; canvas.height = 240;
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return null;
-    ctx.drawImage(video, 0, 0, 320, 240);
-    const dataUrl = canvas.toDataURL("image/jpeg", quality);
-    return dataUrl.split(",")[1];
-  } catch {
-    return null;
   }
 }
 

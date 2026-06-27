@@ -94,7 +94,7 @@ export function useFaceApiEmotion(
           .withFaceExpressions();
 
         if (!det) {
-          setEmotions((p) => ({ ...EMPTY, confidence: 0 }));
+          setEmotions(() => ({ ...EMPTY, confidence: 0 }));
           return;
         }
 

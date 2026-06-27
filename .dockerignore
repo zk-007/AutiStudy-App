@@ -1,0 +1,33 @@
+# Docker build context exclusions (repo root — used by backend/Dockerfile)
+.git
+.github
+
+# Frontend (only books_mds is copied)
+frontend/node_modules
+frontend/.next
+frontend/out
+frontend/docs
+frontend/versions
+frontend/scripts
+frontend/design-captures
+
+# Backend dev / docs
+backend/__pycache__
+backend/.venv
+backend/venv
+backend/Presentation
+backend/docs
+backend/Retriever_logic
+backend/Autistudy_Journal
+backend/temp_generated_images
+backend/*.ipynb
+backend/.ipynb_checkpoints
+
+# Secrets
+backend/config/secrets.toml
+**/.env
+**/*.env
+
+# OS
+.DS_Store
+Thumbs.db

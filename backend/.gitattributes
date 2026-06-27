@@ -1,3 +1,0 @@
-OneSharedChromaDB/*.bin filter=lfs diff=lfs merge=lfs -text
-OneSharedChromaDB/*.sqlite3 filter=lfs diff=lfs merge=lfs -text
-**/*.bin filter=lfs diff=lfs merge=lfs -text

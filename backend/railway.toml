@@ -1,6 +1,9 @@
+# Railway config — set service Root Directory to repo root (empty), not backend/.
+# In Build settings: Builder = Dockerfile, Dockerfile path = backend/Dockerfile
 [build]
 builder = "DOCKERFILE"
-dockerfilePath = "Dockerfile"
+dockerfilePath = "backend/Dockerfile"
+watchPatterns = ["backend/**", "frontend/books_mds/**"]
 
 [deploy]
 healthcheckPath = "/api/health"

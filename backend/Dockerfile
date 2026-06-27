@@ -1,5 +1,7 @@
-FROM python:3.11-slim
+# Build from repo root (Railway: leave Root Directory empty, set Dockerfile path to backend/Dockerfile)
+FROM python:3.11-slim-bookworm
 
+ENV DEBIAN_FRONTEND=noninteractive
 WORKDIR /app
 
 RUN apt-get update && \
@@ -10,10 +12,13 @@ RUN apt-get update && \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
-COPY requirements.txt .
+COPY backend/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-COPY . .
+COPY backend/ .
+COPY frontend/books_mds ./books_mds
+
+ENV BOOKS_DIR=/app/books_mds
 RUN mkdir -p data config
 
 ENV PORT=8000

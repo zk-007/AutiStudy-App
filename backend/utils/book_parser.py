@@ -13,6 +13,7 @@ Books live in AutiStudy-React/books_mds/ and follow three heading patterns:
 
 from __future__ import annotations
 
+import os
 import re
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
@@ -21,8 +22,10 @@ from typing import Dict, List, Optional, Tuple
 # Monorepo layout: AutiStudy-App/{backend, frontend}
 # Backend lives at  …/AutiStudy-App/backend/
 # Books live at     …/AutiStudy-App/frontend/books_mds/
+# Docker/Railway sets BOOKS_DIR=/app/books_mds (see backend/Dockerfile).
 _BACKEND_DIR = Path(__file__).parent.parent          # …/AutiStudy-App/backend
-BOOKS_DIR = _BACKEND_DIR.parent / "frontend" / "books_mds"
+_DEFAULT_BOOKS = _BACKEND_DIR.parent / "frontend" / "books_mds"
+BOOKS_DIR = Path(os.getenv("BOOKS_DIR", str(_DEFAULT_BOOKS)))
 
 # ── File map: (grade, subject) → relative path inside BOOKS_DIR ───────────────
 BOOK_MAP: Dict[Tuple[int, str], str] = {

@@ -15,6 +15,7 @@ import { useLocale } from "@/lib/i18n/LocaleProvider";
 import { useAuth } from "@/lib/auth/AuthProvider";
 import { resolveReturnUrl, clearReturnUrl } from "@/lib/auth/redirect";
 import { ApiError, parentApi, saveSession, setParentToken } from "@/lib/api/client";
+import { validateEmail } from "@/lib/validation/email";
 
 export default function SignupPage() {
   return (
@@ -143,6 +144,11 @@ function ChildSignupForm({
   const onSubmit = async (e: FormEvent) => {
     e.preventDefault();
     setError(null);
+    const emailErr = validateEmail(email);
+    if (emailErr) {
+      setError(emailErr);
+      return;
+    }
     const rawCnic = childCnic.replace(/\D/g, "");
     if (rawCnic.length !== 13) {
       setError("Please enter your complete 13-digit CNIC.");
@@ -333,6 +339,11 @@ function ParentSignupForm({ onBack, router }: { onBack: () => void; router: Retu
   const onSubmit = async (e: FormEvent) => {
     e.preventDefault();
     setError(null);
+    const emailErr = validateEmail(email);
+    if (emailErr) {
+      setError(emailErr);
+      return;
+    }
     const rawCnic = cnic.replace(/\D/g, "");
     if (rawCnic.length !== 13) {
       setError("Please enter your complete 13-digit CNIC.");

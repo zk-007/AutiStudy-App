@@ -35,7 +35,7 @@ function SignupInner() {
   const nextUrl = resolveReturnUrl(search?.get("next"));
 
   useEffect(() => {
-    if (!authLoading && isAuthenticated) {
+    if (!authLoading && isAuthenticated && !sessionStorage.getItem("autistudy_show_family_code")) {
       router.replace(nextUrl);
     }
   }, [authLoading, isAuthenticated, nextUrl, router]);
@@ -166,8 +166,12 @@ function ChildSignupForm({
         parent_cnic: rawParentCnic,
       });
       saveSession(res.token, res.user);
+      const code = res.family_code ?? res.user.family_code ?? null;
+      if (code) {
+        sessionStorage.setItem("autistudy_show_family_code", code);
+      }
       await refresh();
-      setFamilyCode(res.family_code ?? res.user.family_code ?? null);
+      setFamilyCode(code);
     } catch (err) {
       setError(err instanceof ApiError ? err.detail : "Signup failed. Please try again.");
       setSubmitting(false);
@@ -175,6 +179,7 @@ function ChildSignupForm({
   };
 
   const continueToApp = () => {
+    sessionStorage.removeItem("autistudy_show_family_code");
     clearReturnUrl();
     router.push(nextUrl);
   };

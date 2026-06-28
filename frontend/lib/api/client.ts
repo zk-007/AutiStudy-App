@@ -204,6 +204,8 @@ export const authApi = {
     api<AuthResponse>("/api/auth/login", { method: "POST", body, auth: false }),
   logout: () => api<{ ok: boolean }>("/api/auth/logout", { method: "POST" }),
   me: () => api<User>("/api/auth/me"),
+  deleteAccount: (body: { password: string }) =>
+    api<{ ok: boolean }>("/api/users/me/delete", { method: "POST", body }),
 };
 
 export const userApi = {

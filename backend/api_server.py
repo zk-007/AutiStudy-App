@@ -317,6 +317,14 @@ def _validate_password(password: str) -> str | None:
     return None
 
 
+def _validate_email(email: str) -> None:
+    from utils.email_validation import validate_email
+
+    err = validate_email(email)
+    if err:
+        raise HTTPException(400, err)
+
+
 def _strip_password(user: dict) -> dict:
     safe = {**user}
     safe.pop("password", None)
@@ -364,8 +372,7 @@ def health():
 @app.post("/api/auth/register", response_model=AuthResponse)
 def register(req: RegisterReq):
     email = req.email.strip().lower()
-    if not email or "@" not in email:
-        raise HTTPException(400, "Please provide a valid email address.")
+    _validate_email(email)
     pw_err = _validate_password(req.password)
     if pw_err:
         raise HTTPException(400, pw_err)
@@ -432,8 +439,7 @@ def child_signup(req: ChildSignupReq):
     )
 
     email = req.email.strip().lower()
-    if not email or "@" not in email:
-        raise HTTPException(400, "Please provide a valid email address.")
+    _validate_email(email)
     pw_err = _validate_password(req.password)
     if pw_err:
         raise HTTPException(400, pw_err)
@@ -565,8 +571,7 @@ def parent_signup(req: ParentSignupReq):
     from utils.family_link import cnic_match, names_match, validate_cnic
 
     email = req.email.strip().lower()
-    if not email or "@" not in email:
-        raise HTTPException(400, "Please provide a valid email address.")
+    _validate_email(email)
     pw_err = _validate_password(req.password)
     if pw_err:
         raise HTTPException(400, pw_err)

@@ -146,11 +146,13 @@ export interface User {
   stars: number;
   badges: string[];
   progress: Record<string, unknown>;
+  family_code?: string;
 }
 
 export interface AuthResponse {
   token: string;
   user: User;
+  family_code?: string;
 }
 
 export interface Stats {
@@ -679,7 +681,15 @@ export interface ParentDashboardData {
 }
 
 export const parentApi = {
-  signup: (body: { name: string; email: string; password: string; cnic: string; child_name: string; child_cnic?: string }) =>
+  signup: (body: {
+    name: string;
+    email: string;
+    password: string;
+    cnic: string;
+    child_name: string;
+    child_cnic: string;
+    family_code: string;
+  }) =>
     fetch(`${API_BASE}/api/auth/parent/signup`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -710,24 +720,15 @@ export const parentApi = {
   dashboard: () => apiParent<ParentDashboardData>("/api/parent/dashboard"),
   report: () => apiParent<{ child_name: string; report: string; generated_at: string }>("/api/parent/report"),
 
-  /** Child signup with B-Form image — sends multipart/form-data */
-  childSignup: (data: { name: string; email: string; password: string; grade: number; cnic: string; bform: File }) => {
-    const form = new FormData();
-    form.append("name", data.name);
-    form.append("email", data.email);
-    form.append("password", data.password);
-    form.append("grade", String(data.grade));
-    form.append("cnic", data.cnic);
-    form.append("bform", data.bform);
-    return fetch(`${API_BASE}/api/auth/child/signup`, {
-      method: "POST",
-      body: form,
-    }).then(async (res) => {
-      if (!res.ok) {
-        const d = await res.json().catch(() => ({}));
-        throw new ApiError(res.status, d?.detail ?? "Signup failed");
-      }
-      return res.json() as Promise<AuthResponse>;
-    });
-  },
+  /** Student signup with parent details for family linking */
+  childSignup: (data: {
+    name: string;
+    email: string;
+    password: string;
+    grade: number;
+    cnic: string;
+    parent_name: string;
+    parent_cnic: string;
+  }) =>
+    api<AuthResponse>("/api/auth/child/signup", { method: "POST", body: data, auth: false }),
 };

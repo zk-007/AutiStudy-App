@@ -1,12 +1,12 @@
 "use client";
 
-import { ChangeEvent, FormEvent, Suspense, useEffect, useRef, useState } from "react";
+import { FormEvent, Suspense, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   AlertCircle, CreditCard, GraduationCap, Lock, Mail,
-  Upload, User, Users, X, CheckCircle2, Eye, EyeOff,
+  User, Users, Eye, EyeOff, KeyRound,
 } from "lucide-react";
 import { NavBar } from "@/components/layout/NavBar";
 import { Footer } from "@/components/layout/Footer";
@@ -31,7 +31,7 @@ function SignupInner() {
   const { t } = useLocale();
   const router = useRouter();
   const search = useSearchParams();
-  const { register, refresh, isAuthenticated, isLoading: authLoading } = useAuth();
+  const { refresh, isAuthenticated, isLoading: authLoading } = useAuth();
   const nextUrl = resolveReturnUrl(search?.get("next"));
 
   useEffect(() => {
@@ -94,11 +94,6 @@ function SignupInner() {
               <motion.div key="child" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }}>
                 <ChildSignupForm
                   onBack={() => setRole(null)}
-                  onSuccess={(token) => {
-                    clearReturnUrl();
-                    router.push(nextUrl);
-                  }}
-                  register={register}
                   refresh={refresh}
                   nextUrl={nextUrl}
                   router={router}
@@ -120,11 +115,9 @@ function SignupInner() {
 // ── Child signup form ─────────────────────────────────────────────────────────
 
 function ChildSignupForm({
-  onBack, onSuccess, register, refresh, nextUrl, router,
+  onBack, refresh, nextUrl, router,
 }: {
   onBack: () => void;
-  onSuccess: (token: string) => void;
-  register: (data: { name: string; email: string; password: string; grade: number; role?: string }) => Promise<unknown>;
   refresh: () => Promise<void>;
   nextUrl: string;
   router: ReturnType<typeof useRouter>;
@@ -134,12 +127,11 @@ function ChildSignupForm({
   const [password, setPassword] = useState("");
   const [grade, setGrade] = useState(4);
   const [childCnic, setChildCnic] = useState("");
-  const [bformFile, setBformFile] = useState<File | null>(null);
-  const [bformPreview, setBformPreview] = useState<string | null>(null);
+  const [parentName, setParentName] = useState("");
+  const [parentCnic, setParentCnic] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [ocrStatus, setOcrStatus] = useState<"idle" | "scanning" | "ok" | "error">("idle");
-  const fileRef = useRef<HTMLInputElement>(null);
+  const [familyCode, setFamilyCode] = useState<string | null>(null);
 
   const formatCnic = (val: string) => {
     const digits = val.replace(/\D/g, "").slice(0, 13);
@@ -148,42 +140,66 @@ function ChildSignupForm({
     return `${digits.slice(0, 5)}-${digits.slice(5, 12)}-${digits.slice(12)}`;
   };
 
-  const onFileChange = (e: ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    setBformFile(file);
-    setBformPreview(URL.createObjectURL(file));
-    setOcrStatus("idle");
-    setError(null);
-  };
-
   const onSubmit = async (e: FormEvent) => {
     e.preventDefault();
     setError(null);
     const rawCnic = childCnic.replace(/\D/g, "");
     if (rawCnic.length !== 13) {
-      setError("Please enter your complete 13-digit CNIC (B-Form number).");
+      setError("Please enter your complete 13-digit CNIC.");
       return;
     }
-    if (!bformFile) {
-      setError("Please upload a photo of your CRC / B-Form to verify your identity.");
+    const rawParentCnic = parentCnic.replace(/\D/g, "");
+    if (rawParentCnic.length !== 13) {
+      setError("Please enter your parent or guardian's complete 13-digit CNIC.");
+      return;
+    }
+    if (!parentName.trim()) {
+      setError("Please enter your parent or guardian's name.");
       return;
     }
     setSubmitting(true);
-    setOcrStatus("scanning");
     try {
-      const res = await parentApi.childSignup({ name, email, password, grade, cnic: rawCnic, bform: bformFile });
-      setOcrStatus("ok");
+      const res = await parentApi.childSignup({
+        name, email, password, grade,
+        cnic: rawCnic,
+        parent_name: parentName.trim(),
+        parent_cnic: rawParentCnic,
+      });
       saveSession(res.token, res.user);
       await refresh();
-      clearReturnUrl();
-      router.push(nextUrl);
+      setFamilyCode(res.family_code ?? res.user.family_code ?? null);
     } catch (err) {
-      setOcrStatus("error");
       setError(err instanceof ApiError ? err.detail : "Signup failed. Please try again.");
       setSubmitting(false);
     }
   };
+
+  const continueToApp = () => {
+    clearReturnUrl();
+    router.push(nextUrl);
+  };
+
+  if (familyCode) {
+    return (
+      <div className="rounded-3xl glass-strong p-8 md:p-10 shadow-deep text-center">
+        <div className="text-4xl mb-4">🎉</div>
+        <h1 className="font-display text-2xl font-extrabold text-deep mb-2">Account created!</h1>
+        <p className="text-sm text-deep-soft mb-6">
+          Share this family code with your parent so they can link to your account:
+        </p>
+        <div className="rounded-2xl bg-glacier-50 border-2 border-glacier-300 px-6 py-5 mb-6">
+          <p className="text-xs font-bold text-deep-soft uppercase tracking-wider mb-1">Family code</p>
+          <p className="font-mono text-4xl font-extrabold text-glacier-700 tracking-[0.3em]">{familyCode}</p>
+        </div>
+        <p className="text-xs text-deep-muted mb-6 px-2">
+          Your parent will need this code plus your name, CNIC, and the parent details you entered.
+        </p>
+        <DancingButton type="button" variant="primary" fullWidth onClick={continueToApp}>
+          Continue to dashboard
+        </DancingButton>
+      </div>
+    );
+  }
 
   return (
     <div className="rounded-3xl glass-strong p-8 md:p-10 shadow-deep">
@@ -209,7 +225,6 @@ function ChildSignupForm({
         <PasswordField value={password} onChange={setPassword} />
         <GradeSelect value={grade} onChange={setGrade} />
 
-        {/* Child's own CNIC */}
         <div>
           <label className="block">
             <div className="relative">
@@ -219,7 +234,7 @@ function ChildSignupForm({
               <input
                 type="text"
                 inputMode="numeric"
-                placeholder="Your CNIC / B-Form number (e.g. 35201-1234567-1)"
+                placeholder="Your CNIC (e.g. 35201-1234567-1)"
                 value={childCnic}
                 onChange={(e) => setChildCnic(formatCnic(e.target.value))}
                 required
@@ -228,54 +243,39 @@ function ChildSignupForm({
               />
             </div>
           </label>
-          <p className="text-xs text-deep-muted mt-1.5 px-1">Your 13-digit national identity / B-Form number</p>
+          <p className="text-xs text-deep-muted mt-1.5 px-1">Your 13-digit national identity number</p>
         </div>
 
-        {/* B-Form Upload */}
-        <div>
-          <p className="text-sm font-bold text-deep-soft mb-2 px-1">📄 B-Form / Child Registration Certificate</p>
-          <div
-            onClick={() => fileRef.current?.click()}
-            className={`relative cursor-pointer rounded-2xl border-2 border-dashed transition-all p-4 text-center ${
-              bformFile ? "border-glacier-400 bg-glacier-50/60" : "border-glacier-200 bg-white/40 hover:border-glacier-400 hover:bg-white/60"
-            }`}
-          >
-            <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={onFileChange} />
-
-            {bformPreview ? (
-              <div className="flex items-center gap-3">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={bformPreview} alt="B-Form preview" className="h-16 w-20 object-cover rounded-xl border border-glacier-200 flex-shrink-0" />
-                <div className="flex-1 text-left">
-                  <p className="text-sm font-bold text-deep truncate">{bformFile?.name}</p>
-                  <p className="text-xs text-deep-soft mt-0.5">
-                    {ocrStatus === "scanning" && "🔍 Scanning document…"}
-                    {ocrStatus === "ok" && <span className="text-emerald-600 flex items-center gap-1"><CheckCircle2 size={12} /> Verified</span>}
-                    {ocrStatus === "error" && <span className="text-rose-600">Scan failed — try a clearer photo</span>}
-                    {ocrStatus === "idle" && "Click to change photo"}
-                  </p>
-                </div>
-                <button
-                  type="button"
-                  onClick={(e) => { e.stopPropagation(); setBformFile(null); setBformPreview(null); setOcrStatus("idle"); }}
-                  className="flex h-7 w-7 items-center justify-center rounded-full bg-white border border-glacier-200 text-deep-muted hover:text-deep flex-shrink-0"
-                >
-                  <X size={13} />
-                </button>
+        <div className="pt-1">
+          <p className="text-sm font-bold text-deep-soft mb-2 px-1">Parent / guardian details</p>
+          <Field
+            icon={<Users size={18} />}
+            placeholder="Parent or guardian full name"
+            type="text"
+            value={parentName}
+            onChange={setParentName}
+            required
+            autoComplete="name"
+          />
+          <div className="mt-3">
+            <label className="block">
+              <div className="relative">
+                <span className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-deep-muted">
+                  <CreditCard size={18} />
+                </span>
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  placeholder="Parent CNIC (e.g. 35201-1234567-1)"
+                  value={parentCnic}
+                  onChange={(e) => setParentCnic(formatCnic(e.target.value))}
+                  required
+                  maxLength={15}
+                  className="w-full rounded-2xl bg-white/70 border border-glacier-200/60 pl-12 pr-4 py-3.5 text-deep placeholder:text-deep-muted focus:outline-none focus:ring-4 focus:ring-glacier-300/40 focus:border-glacier-400 transition-all font-mono tracking-widest"
+                />
               </div>
-            ) : (
-              <div className="flex flex-col items-center gap-2 py-3">
-                <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-glacier-100 text-glacier-600">
-                  <Upload size={22} />
-                </div>
-                <p className="text-sm font-bold text-deep">Upload B-Form photo</p>
-                <p className="text-xs text-deep-soft">Take a clear, well-lit photo of your NADRA B-Form</p>
-              </div>
-            )}
+            </label>
           </div>
-          <p className="text-xs text-deep-muted mt-1.5 px-1">
-            We use this to verify your identity for parent access. The image is not stored.
-          </p>
         </div>
 
         {error && (
@@ -292,7 +292,7 @@ function ChildSignupForm({
 
         <div className="pt-2">
           <DancingButton type="submit" variant="primary" fullWidth disabled={submitting} className={submitting ? "opacity-80 cursor-wait" : ""}>
-            {submitting ? (ocrStatus === "scanning" ? "Scanning B-Form…" : "Creating account…") : "Create Student Account"}
+            {submitting ? "Creating account…" : "Create Student Account"}
           </DancingButton>
         </div>
       </form>
@@ -314,6 +314,7 @@ function ParentSignupForm({ onBack, router }: { onBack: () => void; router: Retu
   const [cnic, setCnic] = useState("");
   const [childName, setChildName] = useState("");
   const [childCnic, setChildCnic] = useState("");
+  const [familyCode, setFamilyCode] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -334,7 +335,12 @@ function ParentSignupForm({ onBack, router }: { onBack: () => void; router: Retu
     }
     const rawChildCnic = childCnic.replace(/\D/g, "");
     if (rawChildCnic.length !== 13) {
-      setError("Please enter your child's complete 13-digit CNIC / B-Form number.");
+      setError("Please enter your child's complete 13-digit CNIC.");
+      return;
+    }
+    const rawFamilyCode = familyCode.replace(/\D/g, "");
+    if (rawFamilyCode.length !== 6) {
+      setError("Please enter the 6-digit family code from your child's signup.");
       return;
     }
     setSubmitting(true);
@@ -342,6 +348,7 @@ function ParentSignupForm({ onBack, router }: { onBack: () => void; router: Retu
       const res = await parentApi.signup({
         name, email, password, cnic: rawCnic,
         child_name: childName, child_cnic: rawChildCnic,
+        family_code: rawFamilyCode,
       });
       setParentToken(res.token);
       router.push("/parent/dashboard");
@@ -401,7 +408,7 @@ function ParentSignupForm({ onBack, router }: { onBack: () => void; router: Retu
               <input
                 type="text"
                 inputMode="numeric"
-                placeholder="Child's CNIC / B-Form number (13 digits)"
+                placeholder="Child's CNIC (13 digits)"
                 value={childCnic}
                 onChange={(e) => setChildCnic(formatCnic(e.target.value))}
                 required
@@ -410,7 +417,28 @@ function ParentSignupForm({ onBack, router }: { onBack: () => void; router: Retu
               />
             </div>
           </label>
-          <p className="text-xs text-deep-muted mt-1.5 px-1">The child's own 13-digit national identity / B-Form number</p>
+          <p className="text-xs text-deep-muted mt-1.5 px-1">Must match exactly what your child entered at signup</p>
+        </div>
+
+        <div>
+          <label className="block">
+            <div className="relative">
+              <span className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-deep-muted">
+                <KeyRound size={18} />
+              </span>
+              <input
+                type="text"
+                inputMode="numeric"
+                placeholder="Family code (6 digits from your child)"
+                value={familyCode}
+                onChange={(e) => setFamilyCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
+                required
+                maxLength={6}
+                className="w-full rounded-2xl bg-white/70 border border-glacier-200/60 pl-12 pr-4 py-3.5 text-deep placeholder:text-deep-muted focus:outline-none focus:ring-4 focus:ring-violet-300/40 focus:border-violet-400 transition-all font-mono tracking-[0.2em]"
+              />
+            </div>
+          </label>
+          <p className="text-xs text-deep-muted mt-1.5 px-1">Your child receives this code when they create their account</p>
         </div>
 
         <div>
@@ -432,7 +460,7 @@ function ParentSignupForm({ onBack, router }: { onBack: () => void; router: Retu
             </div>
           </label>
           <p className="text-xs text-deep-muted mt-1.5 px-1">
-            Your CNIC is matched against your child's B-Form for verification.
+            Must match the parent CNIC your child entered at signup
           </p>
         </div>
 
@@ -440,7 +468,7 @@ function ParentSignupForm({ onBack, router }: { onBack: () => void; router: Retu
         <div className="rounded-2xl bg-violet-50/80 border border-violet-200/60 px-4 py-3 text-sm text-violet-700">
           <p className="font-bold mb-0.5">How does this work?</p>
           <p className="text-xs leading-relaxed">
-            Your child must have signed up with their B-Form photo. We extract the parent CNICs from that B-Form and match them with the CNIC you enter here. This ensures only real parents can access the child's data.
+            Your child signs up first with their details and your name and CNIC. They receive a 6-digit family code to share with you. Enter that code here along with matching details to link your account.
           </p>
         </div>
 

@@ -6,7 +6,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   AlertCircle, CreditCard, GraduationCap, Lock, Mail,
-  User, Users, Eye, EyeOff, KeyRound,
+  User, Users, Eye, EyeOff, KeyRound, CheckCircle2,
 } from "lucide-react";
 import { NavBar } from "@/components/layout/NavBar";
 import { Footer } from "@/components/layout/Footer";

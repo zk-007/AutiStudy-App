@@ -9,7 +9,8 @@ import {
 import { useSettings, type AppSettings } from "@/lib/settings/SettingsContext";
 import { useLocale } from "@/lib/i18n/LocaleProvider";
 import { useAuth } from "@/lib/auth/AuthProvider";
-import { API_BASE, getToken, ApiError } from "@/lib/api/client";
+import { API_BASE, getToken, ApiError, authApi, clearSession } from "@/lib/api/client";
+import { useRouter } from "next/navigation";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 type Section = "appearance" | "accessibility" | "language" | "profile" | "account" | "about";
@@ -218,7 +219,24 @@ function ProfileSection() {
             <Row label={isUr ? "ستارے" : "Stars"}>
               <span className="text-amber-500 font-bold text-sm">⭐ {user?.stars ?? 0}</span>
             </Row>
+            {user?.family_code && (
+              <Row
+                label={isUr ? "فیملی کوڈ" : "Family code"}
+                sub={isUr ? "والدین کو یہ کوڈ دیں" : "Share with your parent for linking"}
+              >
+                <span className="font-mono text-lg font-extrabold text-violet-700 tracking-widest">
+                  {user.family_code}
+                </span>
+              </Row>
+            )}
           </div>
+          {user?.family_code && (
+            <div className="mt-3 rounded-2xl bg-violet-50 border border-violet-200 px-4 py-3 text-xs text-violet-800 leading-relaxed">
+              {isUr
+                ? "یہ 6 ہندسوں کا کوڈ آپ کے والدین Parent Sign Up پر داخل کریں گے — آپ کا نام، CNIC، اور ان کا نام/CNIC میل کھانا ضروری ہے۔"
+                : "Your parent enters this 6-digit code on Parent Sign Up, along with your name, your CNIC, and their name/CNIC (must match what you entered)."}
+            </div>
+          )}
           <p className="mt-3 text-xs text-deep-muted px-1">
             {isUr ? "نام یا گریڈ تبدیل کرنے کے لیے ادارے سے رابطہ کریں۔" : "To change your name or grade, contact your school administrator."}
           </p>
@@ -230,7 +248,8 @@ function ProfileSection() {
 
 // ── Account section ───────────────────────────────────────────────────────────
 function AccountSection() {
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, logout } = useAuth();
+  const router = useRouter();
   const { locale } = useLocale();
   const isUr = locale === "ur";
   const [current, setCurrent] = useState("");
@@ -240,6 +259,10 @@ function AccountSection() {
   const [showNext, setShowNext]       = useState(false);
   const [status, setStatus] = useState<"idle"|"loading"|"ok"|"err">("idle");
   const [msg, setMsg]       = useState("");
+  const [deletePassword, setDeletePassword] = useState("");
+  const [deleteConfirm, setDeleteConfirm] = useState(false);
+  const [deleteStatus, setDeleteStatus] = useState<"idle"|"loading"|"err">("idle");
+  const [deleteMsg, setDeleteMsg] = useState("");
 
   const rules = [
     { ok: next.length >= 8,                                    text: isUr ? "کم از کم 8 حروف" : "At least 8 characters" },
@@ -270,6 +293,22 @@ function AccountSection() {
       setCurrent(""); setNext(""); setConfirm("");
     } catch (e) {
       setStatus("err"); setMsg(e instanceof ApiError ? e.detail : (isUr ? "سرور سے رابطہ نہیں ہوا" : "Could not reach server"));
+    }
+  };
+
+  const deleteAccount = async () => {
+    if (!deletePassword || !deleteConfirm) return;
+    setDeleteStatus("loading");
+    setDeleteMsg("");
+    try {
+      await authApi.deleteAccount({ password: deletePassword });
+      sessionStorage.removeItem("autistudy_show_family_code");
+      clearSession();
+      await logout().catch(() => undefined);
+      router.push("/");
+    } catch (e) {
+      setDeleteStatus("err");
+      setDeleteMsg(e instanceof ApiError ? e.detail : (isUr ? "اکاؤنٹ حذف نہیں ہو سکا" : "Could not delete account"));
     }
   };
 
@@ -337,6 +376,44 @@ function AccountSection() {
           className="w-full rounded-xl bg-gradient-to-r from-rose-500 to-pink-600 py-2.5 text-sm font-bold text-white disabled:opacity-40 hover:shadow-md transition-all"
         >
           {status === "loading" ? (isUr ? "تبدیل ہو رہا ہے…" : "Changing…") : (isUr ? "پاس ورڈ تبدیل کریں" : "Update Password")}
+        </button>
+      </div>
+
+      <div className="mt-6 rounded-2xl bg-rose-50/80 border border-rose-200 p-5 space-y-4">
+        <h3 className="font-bold text-rose-800 text-sm">{isUr ? "اکاؤنٹ حذف کریں" : "Delete Account"}</h3>
+        <p className="text-xs text-rose-700 leading-relaxed">
+          {isUr
+            ? "یہ آپ کا پروفائل، چیٹس، کوئز، اور والدین لنک مستقل طور پر حذف کر دے گا۔ حذف کے بعد آپ اسی CNIC سے دوبارہ رجسٹر کر سکتے ہیں۔"
+            : "This permanently deletes your profile, chats, quizzes, and parent link. After deletion, you can register again with the same CNIC."}
+        </p>
+        <div>
+          <label className="block text-xs text-rose-800 mb-1">{isUr ? "پاس ورڈ تصدیق" : "Confirm with password"}</label>
+          <input
+            type="password"
+            value={deletePassword}
+            onChange={(e) => setDeletePassword(e.target.value)}
+            className="w-full rounded-xl border border-rose-200 px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-rose-400 bg-white"
+            placeholder="••••••••"
+          />
+        </div>
+        <label className="flex items-start gap-2 text-xs text-rose-800 cursor-pointer">
+          <input
+            type="checkbox"
+            checked={deleteConfirm}
+            onChange={(e) => setDeleteConfirm(e.target.checked)}
+            className="mt-0.5"
+          />
+          <span>{isUr ? "مجھے علم ہے کہ یہ واپس نہیں ہو سکتا" : "I understand this cannot be undone"}</span>
+        </label>
+        {deleteStatus === "err" && (
+          <div className="rounded-xl bg-white border border-rose-200 px-4 py-2 text-sm text-rose-700">{deleteMsg}</div>
+        )}
+        <button
+          onClick={deleteAccount}
+          disabled={!deletePassword || !deleteConfirm || deleteStatus === "loading"}
+          className="w-full rounded-xl bg-rose-600 py-2.5 text-sm font-bold text-white disabled:opacity-40 hover:bg-rose-700 transition-all"
+        >
+          {deleteStatus === "loading" ? (isUr ? "حذف ہو رہا ہے…" : "Deleting…") : (isUr ? "میرا اکاؤنٹ حذف کریں" : "Delete My Account")}
         </button>
       </div>
     </div>

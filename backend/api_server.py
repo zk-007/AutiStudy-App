@@ -935,6 +935,30 @@ def change_password(body: PasswordChangeRequest, current=Depends(get_current_use
     return {"ok": True}
 
 
+class DeleteAccountReq(BaseModel):
+    password: str
+
+
+@app.post("/api/users/me/delete")
+def delete_my_account(body: DeleteAccountReq, current=Depends(get_current_user)):
+    """Permanently delete the logged-in student account and all associated data."""
+    from utils.user_cleanup import delete_student_account
+
+    email = current["email"]
+    users = load_users()
+    user = users.get(email)
+    if not user:
+        raise HTTPException(404, "User not found.")
+
+    if not verify_password(body.password, user.get("password", "")):
+        raise HTTPException(400, "Password is incorrect.")
+
+    if not delete_student_account(email, current_token=current["token"]):
+        raise HTTPException(404, "User not found.")
+
+    return {"ok": True}
+
+
 # ──────────────────────────────────────────────────────────────────────────────
 # Dashboard data
 # ──────────────────────────────────────────────────────────────────────────────

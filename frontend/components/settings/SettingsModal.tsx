@@ -354,7 +354,7 @@ function AboutSection() {
         {[
           { emoji: "🧠", title: isUr ? "ہمارا مقصد" : "Our Mission", body: isUr ? "AutiStudy ہر ذہن کے لیے بنایا گیا ہے — ایک صبر کرنے والا AI ٹیوٹر جو آپ کی رفتار سے سیکھاتا ہے۔" : "AutiStudy is built for every mind — a patient AI tutor that teaches at your pace, your way." },
           { emoji: "📚", title: isUr ? "نصاب" : "Curriculum", body: isUr ? "گریڈ 4 تا 7 · پاکستانی قومی نصاب · ریاضی · سائنس · کمپیوٹر · جنرل سائنس" : "Grade 4 to 7 · Pakistan National Curriculum · Maths · Science · Computer · General Science" },
-          { emoji: "🔒", title: isUr ? "رازداری" : "Privacy", body: isUr ? "آپ کا ڈیٹا محفوظ ہے۔ بی فارم تصویر صرف تصدیق کے لیے استعمال ہوتی ہے اور فوری طور پر حذف کی جاتی ہے۔" : "Your data is safe. B-Form images are used only for verification and deleted immediately." },
+          { emoji: "🔒", title: isUr ? "رازداری" : "Privacy", body: isUr ? "آپ کا ڈیٹا محفوظ ہے۔ CNIC صرف والدین-بچے کے اکاؤنٹ لنک کرنے کے لیے استعمال ہوتا ہے۔" : "Your data is safe. CNIC details are used only to link parent and student accounts." },
           { emoji: "⚙️", title: isUr ? "ورژن" : "Version", body: "AutiStudy v2.0 · 2026" },
         ].map(item => (
           <div key={item.title} className="rounded-2xl bg-white/80 border border-glacier-100 px-5 py-4">

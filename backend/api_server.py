@@ -45,10 +45,11 @@ if sys.platform == "win32":
         sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding="utf-8", errors="replace")
 
 import asyncio
+import re
 import threading
 from concurrent.futures import ThreadPoolExecutor
 
-from fastapi import Depends, FastAPI, File, Form, Header, HTTPException, UploadFile
+from fastapi import Depends, FastAPI, Header, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
@@ -195,11 +196,6 @@ def _background_warmup():
                 print("[api_server] OpenAI client: no key found (skipping pre-warm).")
         except Exception as llm_exc:
             print(f"[api_server] OpenAI pre-warm warning (non-fatal): {llm_exc}")
-        try:
-            from utils.ocr import preload_ocr
-            preload_ocr()
-        except Exception as ocr_exc:
-            print(f"[api_server] OCR preload warning (non-fatal): {ocr_exc}")
         print("[api_server] Background warmup complete.")
     except Exception as exc:
         print(f"[api_server] Background warmup error (non-fatal): {exc}")
@@ -270,6 +266,17 @@ class LoginReq(BaseModel):
 class AuthResponse(BaseModel):
     token: str
     user: dict
+    family_code: Optional[str] = None
+
+
+class ChildSignupReq(BaseModel):
+    name: str
+    email: str
+    password: str
+    grade: int = 4
+    cnic: str
+    parent_name: str
+    parent_cnic: str
 
 
 class CreateChatReq(BaseModel):
@@ -413,69 +420,74 @@ def me(current=Depends(get_current_user)):
     return _strip_password(current["user"])
 
 
-# ── Child signup with B-Form upload ──────────────────────────────────────────
+# ── Child signup (family code linking) ───────────────────────────────────────
 
 @app.post("/api/auth/child/signup", response_model=AuthResponse)
-async def child_signup(
-    name: str = Form(...),
-    email: str = Form(...),
-    password: str = Form(...),
-    grade: int = Form(4),
-    cnic: str = Form(...),
-    bform: UploadFile = File(...),
-):
-    """Register a child account and extract parent CNICs from B-Form photo."""
-    import re as _re
-    email = email.strip().lower()
+def child_signup(req: ChildSignupReq):
+    """Register a student account with parent details for later family linking."""
+    from utils.family_link import (
+        generate_family_code,
+        normalize_cnic,
+        validate_cnic,
+    )
+
+    email = req.email.strip().lower()
     if not email or "@" not in email:
         raise HTTPException(400, "Please provide a valid email address.")
-    pw_err = _validate_password(password)
+    pw_err = _validate_password(req.password)
     if pw_err:
         raise HTTPException(400, pw_err)
-    if grade not in GRADE_SUBJECTS:
+    if req.grade not in GRADE_SUBJECTS:
         raise HTTPException(400, "Grade must be between 4 and 7.")
-    raw_child_cnic = _re.sub(r"[\s-]", "", cnic.strip())
-    if not _re.fullmatch(r"\d{13}", raw_child_cnic):
-        raise HTTPException(400, "Child CNIC must be exactly 13 digits.")
-    child_cnic_fmt = f"{raw_child_cnic[:5]}-{raw_child_cnic[5:12]}-{raw_child_cnic[12]}"
+
+    parent_name = req.parent_name.strip()
+    if not parent_name:
+        raise HTTPException(400, "Please enter your parent or guardian's name.")
+
+    try:
+        child_cnic_fmt = validate_cnic(req.cnic, "Student CNIC")
+        parent_cnic_fmt = validate_cnic(req.parent_cnic, "Parent CNIC")
+    except ValueError as exc:
+        raise HTTPException(400, str(exc))
 
     users = load_users()
     if email in users:
         raise HTTPException(400, "An account with this email already exists.")
 
-    # ── OCR ──────────────────────────────────────────────────────────────────
-    image_bytes = await bform.read()
-    if len(image_bytes) < 1000:
-        raise HTTPException(400, "The uploaded file is too small. Please upload a clear photo.")
+    child_digits = normalize_cnic(child_cnic_fmt)
+    for u in users.values():
+        if normalize_cnic(u.get("cnic")) == child_digits:
+            raise HTTPException(400, "This CNIC is already registered.")
 
-    from utils.ocr import extract_cnic_from_bform
-    ocr_result = await run_in_thread(extract_cnic_from_bform, image_bytes, child_cnic_fmt)
-
-    if not ocr_result["is_bform"]:
-        raise HTTPException(
-            400,
-            ocr_result.get("error") or "Please upload a valid B-Form image.",
-        )
+    existing_codes = {
+        u.get("family_code")
+        for u in users.values()
+        if u.get("family_code")
+    }
+    try:
+        family_code = generate_family_code(existing_codes)
+    except RuntimeError:
+        raise HTTPException(500, "Could not generate a family code. Please try again.")
 
     users[email] = {
-        "name": name.strip() or "Student",
+        "name": req.name.strip() or "Student",
         "email": email,
-        "password": hash_password(password),
+        "password": hash_password(req.password),
         "role": "student",
-        "grade": grade,
+        "grade": req.grade,
         "stars": 0,
         "badges": [],
         "progress": {},
         "cnic": child_cnic_fmt,
-        "father_cnic": ocr_result.get("father_cnic") or None,
-        "mother_cnic": ocr_result.get("mother_cnic") if ocr_result.get("mother_cnic") != "0" else None,
-        "bform_verified": ocr_result["is_bform"],
+        "parent_name": parent_name,
+        "parent_cnic": parent_cnic_fmt,
+        "family_code": family_code,
     }
     save_users(users)
 
     safe_user = _strip_password(users[email])
     token = create_session(email, safe_user, current_page="dashboard", language="en")
-    return {"token": token, "user": safe_user}
+    return {"token": token, "user": safe_user, "family_code": family_code}
 
 
 # ── Parent session helpers ────────────────────────────────────────────────────
@@ -543,17 +555,15 @@ class ParentSignupReq(BaseModel):
     password: str
     cnic: str
     child_name: str
-    child_cnic: Optional[str] = None   # child's own CNIC for precise matching
+    child_cnic: str
+    family_code: str
 
 
 @app.post("/api/auth/parent/signup", response_model=AuthResponse)
 def parent_signup(req: ParentSignupReq):
-    """
-    Register a parent account.
-    Matches the child by name + child CNIC (if provided), then verifies
-    the parent's CNIC against what was extracted from the child's B-Form.
-    """
-    import re
+    """Register a parent account linked to an existing student via family code."""
+    from utils.family_link import cnic_match, names_match, validate_cnic
+
     email = req.email.strip().lower()
     if not email or "@" not in email:
         raise HTTPException(400, "Please provide a valid email address.")
@@ -561,69 +571,59 @@ def parent_signup(req: ParentSignupReq):
     if pw_err:
         raise HTTPException(400, pw_err)
 
-    # Normalize parent CNIC
-    raw_cnic = re.sub(r"[\s-]", "", req.cnic.strip())
-    if not re.fullmatch(r"\d{13}", raw_cnic):
-        raise HTTPException(400, "Your CNIC must be exactly 13 digits.")
-    cnic_fmt = f"{raw_cnic[:5]}-{raw_cnic[5:12]}-{raw_cnic[12]}"
+    try:
+        cnic_fmt = validate_cnic(req.cnic, "Your CNIC")
+        validate_cnic(req.child_cnic, "Child CNIC")
+    except ValueError as exc:
+        raise HTTPException(400, str(exc))
 
-    # Normalize child CNIC if provided
-    raw_child_cnic = re.sub(r"[\s-]", "", (req.child_cnic or "").strip())
-    if raw_child_cnic and not re.fullmatch(r"\d{13}", raw_child_cnic):
-        raise HTTPException(400, "Child CNIC must be exactly 13 digits.")
+    family_code = req.family_code.strip()
+    if not re.fullmatch(r"\d{6}", family_code):
+        raise HTTPException(400, "Family code must be exactly 6 digits.")
 
     if parent_exists(email):
         raise HTTPException(400, "A parent account with this email already exists.")
 
-    # ── Find child ────────────────────────────────────────────────────────────
     users = load_users()
-    child_name_lower = req.child_name.strip().lower()
     matched_child = None
-
     for u in users.values():
-        name_ok = u.get("name", "").strip().lower() == child_name_lower
-        if not name_ok:
+        if not names_match(u.get("name"), req.child_name):
             continue
-        # If child CNIC was provided, use it as an additional verification
-        if raw_child_cnic:
-            stored_child_cnic = re.sub(r"[\s-]", "", (u.get("cnic") or ""))
-            if stored_child_cnic == raw_child_cnic:
-                matched_child = u
-                break
-        else:
-            matched_child = u
-            break
+        if not cnic_match(u.get("cnic"), req.child_cnic):
+            continue
+        matched_child = u
+        break
 
     if matched_child is None:
-        if raw_child_cnic:
-            raise HTTPException(
-                404,
-                f"No student named '{req.child_name}' with that CNIC is using AutiStudy. "
-                "Please check the name and CNIC, or ask your child to sign up first."
-            )
         raise HTTPException(
             404,
-            f"No student named '{req.child_name}' is using AutiStudy. "
-            "Please ask your child to sign up first."
+            f"No student named '{req.child_name.strip()}' with that CNIC found. "
+            "Please check the details or ask your child to sign up first.",
         )
 
-    # ── Parent CNIC match against B-Form data ─────────────────────────────────
-    father_cnic = re.sub(r"[\s-]", "", (matched_child.get("father_cnic") or ""))
-    mother_cnic = re.sub(r"[\s-]", "", (matched_child.get("mother_cnic") or ""))
-
-    if not father_cnic and not mother_cnic:
+    stored_code = (matched_child.get("family_code") or "").strip()
+    if not stored_code:
         raise HTTPException(
             400,
-            f"'{req.child_name}' has not uploaded a CRC/B-Form yet. "
-            "Ask them to re-register with their CRC photo so we can verify your identity."
+            "This student account was created before family linking was enabled. "
+            "Ask them to contact support or re-register.",
         )
-
-    verified = raw_cnic in (father_cnic, mother_cnic)
-    if not verified:
+    if stored_code != family_code:
         raise HTTPException(
             403,
-            "Your CNIC does not match the records extracted from your child's CRC/B-Form. "
-            "Please check your 13-digit CNIC and try again."
+            "Invalid family code. Ask your child for the 6-digit code shown when they signed up.",
+        )
+
+    if not names_match(matched_child.get("parent_name"), req.name):
+        raise HTTPException(
+            403,
+            "Your name does not match the parent name registered with this student.",
+        )
+
+    if not cnic_match(matched_child.get("parent_cnic"), req.cnic):
+        raise HTTPException(
+            403,
+            "Your CNIC does not match the parent CNIC registered with this student.",
         )
 
     record = create_parent(

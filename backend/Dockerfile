@@ -9,6 +9,9 @@ RUN apt-get update && \
     build-essential \
     curl \
     git \
+    libgl1 \
+    libglib2.0-0 \
+    libgomp1 \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 

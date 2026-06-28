@@ -195,6 +195,11 @@ def _background_warmup():
                 print("[api_server] OpenAI client: no key found (skipping pre-warm).")
         except Exception as llm_exc:
             print(f"[api_server] OpenAI pre-warm warning (non-fatal): {llm_exc}")
+        try:
+            from utils.ocr import preload_ocr
+            preload_ocr()
+        except Exception as ocr_exc:
+            print(f"[api_server] OCR preload warning (non-fatal): {ocr_exc}")
         print("[api_server] Background warmup complete.")
     except Exception as exc:
         print(f"[api_server] Background warmup error (non-fatal): {exc}")
@@ -444,7 +449,7 @@ async def child_signup(
         raise HTTPException(400, "The uploaded file is too small. Please upload a clear photo.")
 
     from utils.ocr import extract_cnic_from_bform
-    ocr_result = await run_in_thread(extract_cnic_from_bform, image_bytes)
+    ocr_result = await run_in_thread(extract_cnic_from_bform, image_bytes, child_cnic_fmt)
 
     if not ocr_result["is_bform"]:
         raise HTTPException(

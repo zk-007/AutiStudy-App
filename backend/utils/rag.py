@@ -1025,9 +1025,12 @@ def compute_relevance_score(hits: List[Dict]) -> float:
         return 0.0
 
     if top.get("rerank_score") is not None:
-        if score < 0:
-            return max(0.0, 0.3 + score * 0.1)
-        return min(1.0, score)
+        # ms-marco cross-encoder: modest positives (~0–3) are still good matches
+        if score >= 2.0:
+            return min(1.0, 0.85 + score * 0.02)
+        if score >= 0:
+            return min(1.0, 0.45 + score * 0.15)
+        return max(0.0, 0.35 + score * 0.1)
 
     if top.get("score") is not None or top.get("dense_sim") is not None:
         return min(1.0, max(0.0, score))
@@ -1049,7 +1052,9 @@ SUBJECT_KEYWORDS = {
         "geometry", "algebra", "arithmetic", "digit", "place value", "even", "odd",
         "prime", "factor", "multiple", "ratio", "proportion", "average", "mean",
         "graph", "chart", "table", "pattern", "sequence", "formula", "measurement",
-        "meter", "kilometer", "gram", "kilogram", "liter", "time", "clock", "money"
+        "meter", "kilometer", "gram", "kilogram", "liter", "time", "clock", "money",
+        # Common question phrasing (textbook-style)
+        "what", "how", "find", "simplify", "convert", "lcm", "hcf", "unit",
     ],
     "General Science": [
         "animal", "plant", "cell", "body", "organ", "blood", "heart", "brain",
@@ -1059,7 +1064,8 @@ SUBJECT_KEYWORDS = {
         "molecule", "chemical", "reaction", "food", "nutrition", "health",
         "disease", "medicine", "environment", "pollution", "ecosystem", "habitat",
         "photosynthesis", "respiration", "digestion", "skeleton", "muscle", "nerve",
-        "metal", "brass", "iron", "copper", "zinc", "rock", "mineral", "soil"
+        "metal", "brass", "iron", "copper", "zinc", "rock", "mineral", "soil",
+        "what", "how", "why", "define", "explain", "types", "name", "describe",
     ],
     "Computer": [
         "computer", "keyboard", "mouse", "monitor", "screen", "cpu", "ram",
@@ -1068,9 +1074,49 @@ SUBJECT_KEYWORDS = {
         "folder", "save", "delete", "copy", "paste", "print", "scan", "input",
         "output", "process", "data", "information", "digital", "technology",
         "network", "wifi", "bluetooth", "usb", "application", "app", "operating",
-        "windows", "icon", "desktop", "laptop", "tablet", "smartphone"
+        "windows", "icon", "desktop", "laptop", "tablet", "smartphone",
+        "what", "how", "define", "explain", "ict", "word", "excel", "powerpoint",
     ]
 }
+
+
+def _decide_is_relevant(
+    hits: List[Dict],
+    relevance_score: float,
+    query_seems_related: bool,
+) -> bool:
+    """
+    Decide if retrieved chunks are textbook-grounded enough to tutor.
+
+    Pipelines already filter candidates (BM25 + keyword gate + rerank).
+    Default: trust retrieval unless scores are clearly bad — reduces false
+    "not in textbook" replies when wording differs from the book.
+    """
+    if not hits:
+        return False
+
+    top = hits[0]
+    rerank = top.get("rerank_score")
+    if rerank is not None:
+        if float(rerank) >= -2.5:
+            return True
+        if float(rerank) < -5.0:
+            return False
+
+    dense = top.get("dense_sim")
+    if dense is None:
+        dense = top.get("score")
+    if dense is not None and float(dense) >= 0.12:
+        return True
+
+    # RRF / hybrid: multiple hits means retrieval found something on-topic
+    if len(hits) >= 2 and relevance_score >= 0.12:
+        return True
+
+    lo = float(os.getenv("RAG_RELEVANCE_THRESHOLD", "0.18"))
+    hi = float(os.getenv("RAG_STRICT_THRESHOLD", "0.25"))
+    threshold = lo if query_seems_related else hi
+    return relevance_score >= threshold
 
 
 def is_query_related_to_subject(query: str, subject: str) -> bool:
@@ -1155,15 +1201,12 @@ def query_knowledge_base(
     
     # Compute relevance score from retrieved hits
     relevance_score = compute_relevance_score(hits)
-    
-    # Use different thresholds based on whether query seems related
-    # If query doesn't seem related to subject, use MUCH stricter threshold
-    if query_seems_related:
-        RELEVANCE_THRESHOLD = 0.35  # Normal threshold for on-topic queries
-    else:
-        RELEVANCE_THRESHOLD = 0.55  # Strict threshold for potentially off-topic queries
-    
-    is_relevant = relevance_score >= RELEVANCE_THRESHOLD and len(hits) > 0
+    is_relevant = _decide_is_relevant(hits, relevance_score, quick_related)
+    threshold_note = (
+        float(os.getenv("RAG_RELEVANCE_THRESHOLD", "0.18"))
+        if quick_related
+        else float(os.getenv("RAG_STRICT_THRESHOLD", "0.25"))
+    )
     
     # Format results
     documents = []
@@ -1174,7 +1217,11 @@ def query_knowledge_base(
             "score": h.get("rerank_score") or h.get("dense_sim") or h.get("hybrid_score") or h.get("rrf") or h.get("score", 0)
         })
     
-    print(f"[RAG] Query related to {subject}: {query_seems_related} | Relevance: {relevance_score:.3f} | Threshold: {RELEVANCE_THRESHOLD} | Is relevant: {is_relevant}")
+    print(
+        f"[RAG] Query related to {subject}: {query_seems_related} | "
+        f"Relevance: {relevance_score:.3f} | ref_threshold: {threshold_note:.2f} | "
+        f"hits: {len(hits)} | Is relevant: {is_relevant}"
+    )
     
     return {
         "documents": documents,

@@ -24,6 +24,7 @@ import { Footer } from "@/components/layout/Footer";
 import { useAuth } from "@/lib/auth/AuthProvider";
 import { loginUrlFor } from "@/lib/auth/redirect";
 import { quizApi, type QuizQuestion, type BookChapter, ApiError } from "@/lib/api/client";
+import { QuizMarkdown } from "@/lib/quiz/QuizMarkdown";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 type Phase = "pick" | "chapters" | "loading" | "question" | "result";
@@ -461,7 +462,7 @@ function QuestionCard({
       </div>
 
       {/* Question text */}
-      <h2 className="font-display text-xl font-bold text-deep mb-6 leading-snug">{q.question}</h2>
+      <QuizMarkdown text={q.question} size="lg" className="mb-6 text-deep" />
 
       {/* Options */}
       <div className="space-y-3 mb-6">
@@ -486,7 +487,9 @@ function QuestionCard({
                 ${revealed && isCorrect ? "bg-emerald-400 text-white" : revealed && isSelected ? "bg-rose-400 text-white" : "bg-glacier-100 text-glacier-600"}`}>
                 {["A", "B", "C", "D"][i]}
               </span>
-              <span className="flex-1 text-sm font-medium text-deep">{opt}</span>
+                <span className="flex-1 text-sm font-medium text-deep">
+                  <QuizMarkdown text={opt} size="sm" />
+                </span>
               {revealed && isCorrect && <CheckCircle2 size={18} className="text-emerald-500 flex-shrink-0" />}
               {revealed && isSelected && !isCorrect && <XCircle size={18} className="text-rose-500 flex-shrink-0" />}
             </motion.button>
@@ -505,9 +508,11 @@ function QuestionCard({
           >
             <div className={`rounded-2xl px-5 py-4 border ${selected === q.correct ? "bg-emerald-50 border-emerald-200" : "bg-amber-50 border-amber-200"}`}>
               <div className={`text-xs font-bold uppercase tracking-wide mb-1 ${selected === q.correct ? "text-emerald-600" : "text-amber-600"}`}>
-                {selected === q.correct ? "Correct! 🎉" : "Not quite! The correct answer is: " + q.correct}
+                {selected === q.correct ? "Correct! 🎉" : (
+                  <>Not quite! The correct answer is: <QuizMarkdown text={q.correct} size="sm" className="inline" /></>
+                )}
               </div>
-              <p className="text-sm text-deep">{q.explanation}</p>
+              <QuizMarkdown text={q.explanation} size="sm" className="text-deep" />
             </div>
           </motion.div>
         )}
@@ -614,10 +619,10 @@ function ResultScreen({
               {correct
                 ? <CheckCircle2 size={18} className="text-emerald-500 mt-0.5 flex-shrink-0" />
                 : <XCircle size={18} className="text-rose-500 mt-0.5 flex-shrink-0" />}
-              <div className="min-w-0">
-                <p className="text-sm font-medium text-deep truncate">{q.question}</p>
+              <div className="min-w-0 flex-1">
+                <QuizMarkdown text={q.question} size="sm" className="text-deep font-medium break-words" />
                 {!correct && (
-                  <p className="text-xs text-deep-soft mt-0.5">
+                  <p className="text-xs text-deep-soft mt-1 break-words">
                     Your answer: <span className="text-rose-600">{answers[i] || "—"}</span>
                     {" · "}Correct: <span className="text-emerald-600">{q.correct}</span>
                   </p>

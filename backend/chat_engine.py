@@ -295,7 +295,7 @@ def generate_reply(
     """
     _boot()
     history_list = [m for m in history if m.get("role") in {"user", "assistant"}]
-    default_meta = {"is_relevant": True, "query_related_to_subject": True}
+    default_meta = {"is_relevant": False, "query_related_to_subject": True}
 
     if not _have_key:
         return {"text": _no_key_reply(user_message, language), **default_meta}
@@ -319,7 +319,7 @@ def generate_reply(
                 if text:
                     return {
                         "text": text,
-                        "is_relevant": bool(result.get("is_relevant", True)),
+                        "is_relevant": bool(result.get("is_relevant", False)),
                         "query_related_to_subject": bool(
                             result.get("query_related_to_subject", True)
                         ),

@@ -53,6 +53,7 @@ import { UnderstandingCheck } from "@/components/agent/UnderstandingCheck";
 import { BreathingModal } from "@/components/agent/BreathingModal";
 import { StepMcqPanel } from "@/components/agent/StepMcqPanel";
 import { useComprehensionFlow } from "@/lib/hooks/useComprehensionFlow";
+import { shouldShowComprehensionPopup } from "@/lib/agent/comprehensionGate";
 import { playTtsAudio } from "@/lib/audio/playTtsAudio";
 import { loginUrlFor } from "@/lib/auth/redirect";
 import { QuizMarkdown } from "@/lib/quiz/QuizMarkdown";
@@ -676,7 +677,7 @@ function Conversation({ sessionId }: { sessionId: string }) {
       try {
         const preferredFormat = agentGetPreferredFormat();
         const reply = await chatApi.send(sessionId, content, preferredFormat);
-        const onTopic = reply.is_relevant !== false && !reply.assistant_message.skip_tutor;
+        const showComprehensionPopup = shouldShowComprehensionPopup(reply);
         setSession((prev) => {
           if (!prev) return prev;
           const next = [...prev.messages];
@@ -688,9 +689,10 @@ function Conversation({ sessionId }: { sessionId: string }) {
             timestamp: reply.session.timestamp ?? prev.timestamp,
           };
         });
-        if (onTopic) {
+        // Always reset ladder state on a new Q&A; popup only for textbook content.
+        flowOnStudentQuestion();
+        if (showComprehensionPopup) {
           agentOnStudentNewMessage();
-          flowOnStudentQuestion();
           flowOnAssistantAnswerRef.current();
           if (ttsAutoReadRef.current) {
             const text = reply.assistant_message.content?.trim();

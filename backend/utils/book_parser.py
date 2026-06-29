@@ -4,11 +4,19 @@ Book Parser for AutiStudy
 Reads grade-wise markdown textbooks and extracts chapters/units
 so the quiz engine can generate questions from specific content.
 
-Books live in AutiStudy-React/books_mds/ and follow three heading patterns:
+Books live in frontend/books_mds/ with these heading styles:
 
-  Science (gs)      : # Chapter 01  →  next # line = title
-  Maths             : # Unit 1 Whole Numbers  (title in same line)
-  Computer Science  : # UNIT 1  →  next # line = title
+  Maths (Gr 4–5)   : Unit 1 Whole Numbers        (no #, plain line)
+                     Unit 8: Perimeter and Area
+                     # Unit 5 Distance and Time  (with #, mixed in same book)
+  Maths (Gr 6)     : # Sub-Domain 1: FACTORS
+                     80 | Sub-Domain-6: ALGEBRA  (page header, no #)
+  Maths (Gr 7)     : CHAPTER 1  /  CHAPTER  (bare) + # CHAPTER 8 TITLE
+  Science          : # Chapter 01  + title on next line
+                     # 03 Flowers and Seeds
+                     # O2 Microorganisms  (OCR: zero read as letter O)
+                     ## Q1 Classification…  (Grade 5 ch 1)
+  Computer         : # UNIT 1 Emerging Technologies
 """
 
 from __future__ import annotations
@@ -44,28 +52,37 @@ BOOK_MAP: Dict[Tuple[int, str], str] = {
 # ── Heading patterns ───────────────────────────────────────────────────────────
 # Each pattern: group 1 = number string, group 2 = inline title (may be empty)
 _PATTERNS = [
+    # OCR typo: "# O2 Microorganisms" (zero read as letter O in Grade 5 Science)
+    re.compile(r"^#\s+O(\d)\s+(.+)$", re.IGNORECASE),
     # Grade 7 Maths: "# CHAPTER 8 ALGEBRAIC EXPRESSIONS"
     re.compile(r"^#\s+CHAPTER\s+0*(\d+)[:\s]*(.*)$", re.IGNORECASE),
     # Grade 7 Maths: "CHAPTER 1" / "CHAPTER 11"
     re.compile(r"^CHAPTER\s+0*(\d+)\s*$", re.IGNORECASE),
+    # Plain Unit (no hash) — Grade 4/5 Maths: "Unit 1 Whole Numbers", "Unit 8: Perimeter"
+    re.compile(r"^Unit\s+0*(\d+)\s*[:.]?\s+(.+)$", re.IGNORECASE),
+    # Sub-Domain page header — Grade 6 Maths: "80 | Sub-Domain-6: ALGEBRAIC EXPRESSIONS"
+    re.compile(r"^(?:\d+\s*\|\s*)?Sub-Domain[-\s]+0*(\d+)\s*:\s*(.+)$", re.IGNORECASE),
     # "# Chapter 01: Heat"  or  "# Chapter 5 Fractions"  or  "# Chapter 01"
     re.compile(r"^#{1,3}\s+Chapter\s+0*(\d+)[:\s]*(.*)$", re.IGNORECASE),
-    # "# Unit 1 Whole Numbers"  or  "## Unit 3 Fractions"  or  "# Unit 5"
-    re.compile(r"^#{1,3}\s+Unit\s+0*(\d+)[:\s]*(.*)$", re.IGNORECASE),
+    # "# Unit 1 Whole Numbers"  or  "## Unit 3 Fractions"  (not ### — that's end TOC)
+    re.compile(r"^#{1,2}\s+Unit\s+0*(\d+)[:\s]*(.*)$", re.IGNORECASE),
     # "# UNIT 1 Emerging Technologies"  or  "# UNIT 1"
-    re.compile(r"^#{1,3}\s+UNIT\s+0*(\d+)[:\s]*(.*)$", re.IGNORECASE),
-    # "# Sub-Domain 1: FACTORS"  (Grade 6 Maths)
-    re.compile(r"^#{1,3}\s+Sub-Domain\s+0*(\d+)[:\s]*(.*)$", re.IGNORECASE),
+    re.compile(r"^#{1,2}\s+UNIT\s+0*(\d+)[:\s]*(.*)$", re.IGNORECASE),
+    # "# Sub-Domain 1: FACTORS" or "# Sub-Domain 8 SURFACE AREA" (Grade 6 Maths)
+    re.compile(r"^#{1,3}\s+Sub-Domain\s+0*(\d+)\s*:?\s*(.*)$", re.IGNORECASE),
     # "# 01 Cellular Organization"  or  "# 03 Flowers and Seeds"  (Grade 5/6 Science)
     re.compile(r"^#\s+0*(\d+)\s+([A-Z].+)$"),
     # "## Q1 Classification of Living Organisms"  (Grade 5 Science)
     re.compile(r"^#{1,3}\s+Q0*(\d+)\s+(.+)$", re.IGNORECASE),
 ]
 
-
 _CHAPTER_ONLY = re.compile(r"^CHAPTER\s*$", re.IGNORECASE)
 _CHAPTER_ICON = re.compile(r"^Chapter\s+0*(\d+)\s+icon", re.IGNORECASE)
-_SKIP_TITLE_PREFIXES = ("Student Learning", "After studying", "Animation ")
+_SKIP_TITLE_PREFIXES = ("Student Learning", "After studying", "Animation ", "Students Learning", "Students' Learning")
+_JUNK_TITLE_RE = re.compile(
+    r"^(COMPUTER SCIENCE|MATHEMATICS|GENERAL SCIENCE|MATH)\s*\d*$",
+    re.IGNORECASE,
+)
 
 
 def _resolve_chapter_title(lines: List[str], start_idx: int, num: int, title: str) -> str:
@@ -100,6 +117,16 @@ def _resolve_chapter_title(lines: List[str], start_idx: int, num: int, title: st
         j += 1
 
     return title if title and not title.isdigit() else f"Chapter {num}"
+
+
+def _is_junk_hit(num: int, title: str, start_line: int, grade: int) -> bool:
+    """Drop cover-page false positives (e.g. '# 7 COMPUTER SCIENCE' on page 1)."""
+    t = title.strip()
+    if _JUNK_TITLE_RE.match(t):
+        return True
+    if start_line < 80 and t.isdigit() and int(t) == grade:
+        return True
+    return False
 
 
 def _parse_chapter_block(lines: List[str], start_idx: int) -> Optional[Dict]:
@@ -182,17 +209,20 @@ def _get_book_path(grade: int, subject: str) -> Optional[Path]:
     return p if p.exists() else None
 
 
-def _parse_chapters(text: str, min_start_line: int = 100) -> List[Dict]:
+def _parse_chapters(
+    text: str,
+    min_start_line: int = 0,
+    grade: int = 0,
+) -> List[Dict]:
     """
     Return a list of dicts:
       { "number": int, "title": str, "start_line": int, "end_line": int }
 
-    We do two passes:
-      Pass 1 — find all heading lines that match a chapter/unit pattern.
-      Pass 2 — for headings without an inline title, look ahead one non-blank line.
+    Finds heading lines matching chapter/unit patterns, then keeps the earliest
+    occurrence of each chapter number (skips duplicate TOC entries at book end).
     """
     lines = text.splitlines()
-    hits: List[Dict] = []  # raw hits before deduplication
+    hits: List[Dict] = []
 
     i = 0
     while i < len(lines):
@@ -200,7 +230,7 @@ def _parse_chapters(text: str, min_start_line: int = 100) -> List[Dict]:
 
         if _CHAPTER_ONLY.match(line):
             block = _parse_chapter_block(lines, i)
-            if block:
+            if block and not _is_junk_hit(block["number"], block["title"], block["start_line"], grade):
                 hits.append(block)
             i += 1
             continue
@@ -211,7 +241,8 @@ def _parse_chapters(text: str, min_start_line: int = 100) -> List[Dict]:
                 num = int(m.group(1))
                 title = m.group(2).strip() if len(m.groups()) >= 2 else ""
                 title = _resolve_chapter_title(lines, i, num, title)
-                hits.append({"number": num, "title": title, "start_line": i})
+                if not _is_junk_hit(num, title, i, grade):
+                    hits.append({"number": num, "title": title, "start_line": i})
                 break
         i += 1
 
@@ -219,20 +250,18 @@ def _parse_chapters(text: str, min_start_line: int = 100) -> List[Dict]:
         return []
 
     hits = [h for h in hits if h["start_line"] >= min_start_line]
-
     if not hits:
         return []
 
-    # Deduplicate: keep only the FIRST occurrence of each chapter number
-    # (some books repeat the TOC at the end)
-    seen: set = set()
-    unique: List[Dict] = []
+    # Keep the earliest occurrence of each chapter number (real content beats end TOC)
+    best: Dict[int, Dict] = {}
     for h in hits:
-        if h["number"] not in seen:
-            seen.add(h["number"])
-            unique.append(h)
+        n = h["number"]
+        if n not in best or h["start_line"] < best[n]["start_line"]:
+            best[n] = h
 
-    # Set end_line for each chapter
+    unique = sorted(best.values(), key=lambda c: c["start_line"])
+
     for idx, ch in enumerate(unique):
         ch["end_line"] = unique[idx + 1]["start_line"] - 1 if idx + 1 < len(unique) else len(lines) - 1
 
@@ -278,8 +307,7 @@ def get_chapters(grade: int, subject: str) -> Optional[List[Dict]]:
     if path is None:
         return None
     text = path.read_text(encoding="utf-8", errors="ignore")
-    min_start = 0 if grade == 7 and subject == "Maths" else 100
-    chapters = _parse_chapters(text, min_start_line=min_start)
+    chapters = _parse_chapters(text, min_start_line=0, grade=grade)
     # Clean up titles: remove HTML artifacts and sort by chapter number
     cleaned = []
     for ch in chapters:
@@ -301,8 +329,7 @@ def get_chapter_content(grade: int, subject: str, chapter_number: int, max_chars
     if path is None:
         return None
     text = path.read_text(encoding="utf-8", errors="ignore")
-    min_start = 0 if grade == 7 and subject == "Maths" else 100
-    chapters = _parse_chapters(text, min_start_line=min_start)
+    chapters = _parse_chapters(text, min_start_line=0, grade=grade)
 
     target = next((ch for ch in chapters if ch["number"] == chapter_number), None)
     if target is None:

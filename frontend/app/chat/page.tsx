@@ -55,6 +55,7 @@ import { StepMcqPanel } from "@/components/agent/StepMcqPanel";
 import { useComprehensionFlow } from "@/lib/hooks/useComprehensionFlow";
 import { playTtsAudio } from "@/lib/audio/playTtsAudio";
 import { loginUrlFor } from "@/lib/auth/redirect";
+import { QuizMarkdown } from "@/lib/quiz/QuizMarkdown";
 import {
   chatApi,
   quizApi,
@@ -2881,7 +2882,7 @@ function ChatQuizModal({
                 </div>
 
                 {/* Question */}
-                <h3 className="font-display text-lg font-bold text-deep mb-5 leading-snug">{q.question}</h3>
+                <QuizMarkdown text={q.question} size="lg" className="mb-5 text-deep font-display" />
 
                 {/* Options */}
                 <div className="space-y-2.5 mb-5">
@@ -2904,7 +2905,9 @@ function ChatQuizModal({
                           ${revealed && isCorrect ? "bg-emerald-400 text-white" : revealed && isSelected ? "bg-rose-400 text-white" : "bg-glacier-100 text-glacier-600"}`}>
                           {["A","B","C","D"][i]}
                         </span>
-                        <span className="flex-1 text-sm font-medium text-deep">{opt}</span>
+                        <span className="flex-1 text-sm font-medium text-deep break-words">
+                          <QuizMarkdown text={opt} size="sm" />
+                        </span>
                         {revealed && isCorrect && <CheckCircle2 size={16} className="text-emerald-500 flex-shrink-0" />}
                         {revealed && isSelected && !isCorrect && <XCircle size={16} className="text-rose-500 flex-shrink-0" />}
                       </button>
@@ -2921,9 +2924,11 @@ function ChatQuizModal({
                       className={`mb-4 rounded-2xl px-4 py-3 border overflow-hidden ${selected === q.correct ? "bg-emerald-50 border-emerald-200" : "bg-amber-50 border-amber-200"}`}
                     >
                       <div className={`text-xs font-bold mb-1 ${selected === q.correct ? "text-emerald-600" : "text-amber-600"}`}>
-                        {selected === q.correct ? "Correct! 🎉" : `Correct answer: ${q.correct}`}
+                        {selected === q.correct ? "Correct! 🎉" : (
+                          <>Correct answer: <QuizMarkdown text={q.correct} size="sm" className="inline" /></>
+                        )}
                       </div>
-                      <p className="text-sm text-deep">{q.explanation}</p>
+                      <QuizMarkdown text={q.explanation} size="sm" className="text-deep" />
                     </motion.div>
                   )}
                 </AnimatePresence>

@@ -42,6 +42,7 @@ import {
 import { NavBar } from "@/components/layout/NavBar";
 import { useLocale } from "@/lib/i18n/LocaleProvider";
 import { useAuth } from "@/lib/auth/AuthProvider";
+import { useSettings } from "@/lib/settings/SettingsContext";
 import { useAdaptiveTutorAgent, getCameraConsent, setCameraConsent, containsConfusion } from "@/lib/hooks/useAdaptiveTutorAgent";
 import type { PolicyResult } from "@/lib/agent/ComprehensionStateMachine";
 import type { AgentActionPayload } from "@/lib/agent/mediaAgentTypes";
@@ -273,6 +274,7 @@ function Conversation({ sessionId }: { sessionId: string }) {
   const { t, locale } = useLocale();
   const router = useRouter();
   const { user } = useAuth();
+  const { settings } = useSettings();
   const [session, setSession] = useState<ChatSession | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [config, setConfig] = useState<ChatConfig | null>(null);
@@ -316,8 +318,10 @@ function Conversation({ sessionId }: { sessionId: string }) {
   const imageBusyRef = useRef(false);
   const sendingRef = useRef(false);
   const speakingIndexRef = useRef<number | null>(null);
+  const ttsAutoReadRef = useRef(settings.ttsAutoRead);
 
   sessionRef.current = session;
+  ttsAutoReadRef.current = settings.ttsAutoRead;
   imageBusyRef.current = imageBusy;
   sendingRef.current = sending;
   speakingIndexRef.current = speakingIndex;
@@ -374,7 +378,12 @@ function Conversation({ sessionId }: { sessionId: string }) {
     if (effects.triggerImage && !imageBusyRef.current && !sendingRef.current) {
       setTimeout(() => onGenerateImageRef.current?.(), 500);
     }
-    if (effects.triggerVoice && speakingIndexRef.current === null && !sendingRef.current) {
+    if (
+      effects.triggerVoice &&
+      ttsAutoReadRef.current &&
+      speakingIndexRef.current === null &&
+      !sendingRef.current
+    ) {
       const voiceText = getVoiceText(payload, content, priorMessages);
       setTimeout(() => onSpeakRef.current?.(-1, voiceText), 700);
     }
@@ -626,6 +635,12 @@ function Conversation({ sessionId }: { sessionId: string }) {
           agentOnStudentNewMessage();
           flowOnStudentQuestion();
           flowOnAssistantAnswerRef.current();
+          if (ttsAutoReadRef.current) {
+            const text = reply.assistant_message.content?.trim();
+            if (text) {
+              setTimeout(() => speakForFlowRef.current?.(text), 400);
+            }
+          }
         }
       } catch (err) {
         // Roll back optimistic message and surface the error.

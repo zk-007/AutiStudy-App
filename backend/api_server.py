@@ -371,33 +371,12 @@ def health():
 
 @app.post("/api/auth/register", response_model=AuthResponse)
 def register(req: RegisterReq):
-    email = req.email.strip().lower()
-    _validate_email(email)
-    pw_err = _validate_password(req.password)
-    if pw_err:
-        raise HTTPException(400, pw_err)
-    if req.grade not in GRADE_SUBJECTS:
-        raise HTTPException(400, "Grade must be between 4 and 7.")
-
-    users = load_users()
-    if email in users:
-        raise HTTPException(400, "An account with this email already exists.")
-
-    users[email] = {
-        "name": req.name.strip() or "Student",
-        "email": email,
-        "password": hash_password(req.password),
-        "role": req.role,
-        "grade": req.grade,
-        "stars": 0,
-        "badges": [],
-        "progress": {},
-    }
-    save_users(users)
-
-    safe_user = _strip_password(users[email])
-    token = create_session(email, safe_user, current_page="dashboard", language="en")
-    return {"token": token, "user": safe_user}
+    """Legacy endpoint — all students must sign up via /api/auth/child/signup with CNIC."""
+    raise HTTPException(
+        400,
+        "Student signup requires CNIC and parent details. "
+        "Please use the signup page (child account form).",
+    )
 
 
 @app.post("/api/auth/login", response_model=AuthResponse)
@@ -433,8 +412,10 @@ def me(current=Depends(get_current_user)):
 def child_signup(req: ChildSignupReq):
     """Register a student account with parent details for later family linking."""
     from utils.family_link import (
+        find_student_by_identity,
         generate_family_code,
-        normalize_cnic,
+        student_id_from_cnic,
+        student_signup_conflict,
         validate_cnic,
     )
 
@@ -460,10 +441,17 @@ def child_signup(req: ChildSignupReq):
     if email in users:
         raise HTTPException(400, "An account with this email already exists.")
 
-    child_digits = normalize_cnic(child_cnic_fmt)
-    for u in users.values():
-        if normalize_cnic(u.get("cnic")) == child_digits:
-            raise HTTPException(400, "This CNIC is already registered.")
+    conflict = student_signup_conflict(
+        users,
+        student_name=req.name,
+        student_cnic=child_cnic_fmt,
+        parent_name=parent_name,
+        parent_cnic=parent_cnic_fmt,
+    )
+    if conflict:
+        raise HTTPException(400, conflict)
+
+    student_id = student_id_from_cnic(child_cnic_fmt)
 
     existing_codes = {
         u.get("family_code")
@@ -484,6 +472,7 @@ def child_signup(req: ChildSignupReq):
         "stars": 0,
         "badges": [],
         "progress": {},
+        "student_id": student_id,
         "cnic": child_cnic_fmt,
         "parent_name": parent_name,
         "parent_cnic": parent_cnic_fmt,
@@ -568,7 +557,7 @@ class ParentSignupReq(BaseModel):
 @app.post("/api/auth/parent/signup", response_model=AuthResponse)
 def parent_signup(req: ParentSignupReq):
     """Register a parent account linked to an existing student via family code."""
-    from utils.family_link import cnic_match, names_match, validate_cnic
+    from utils.family_link import cnic_match, find_student_by_identity, names_match, validate_cnic
 
     email = req.email.strip().lower()
     _validate_email(email)
@@ -590,14 +579,7 @@ def parent_signup(req: ParentSignupReq):
         raise HTTPException(400, "A parent account with this email already exists.")
 
     users = load_users()
-    matched_child = None
-    for u in users.values():
-        if not names_match(u.get("name"), req.child_name):
-            continue
-        if not cnic_match(u.get("cnic"), req.child_cnic):
-            continue
-        matched_child = u
-        break
+    matched_child = find_student_by_identity(users, req.child_name, req.child_cnic)
 
     if matched_child is None:
         raise HTTPException(

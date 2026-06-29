@@ -340,8 +340,26 @@ def generate_response(
             if documents and is_from_textbook:
                 context = format_context_for_prompt(documents)
                 print(f"Retrieved {len(documents)} documents for query: {user_message[:50]}...")
+            elif documents and not is_from_textbook:
+                # Safety net: retrieval returned chunks but score was borderline —
+                # prefer a grounded answer over blocking a valid textbook question.
+                if relevance_score >= 0.12 or len(documents) >= 2:
+                    context = format_context_for_prompt(documents)
+                    is_from_textbook = True
+                    print(
+                        f"Using {len(documents)} borderline RAG hits "
+                        f"(score={relevance_score:.3f}): {user_message[:50]}..."
+                    )
+                else:
+                    print(
+                        f"Topic NOT in textbook (relevance: {relevance_score:.3f}, "
+                        f"related: {query_related_to_subject}): {user_message[:50]}..."
+                    )
             else:
-                print(f"Topic NOT in textbook (relevance: {relevance_score:.3f}, related: {query_related_to_subject}): {user_message[:50]}...")
+                print(
+                    f"Topic NOT in textbook (relevance: {relevance_score:.3f}, "
+                    f"related: {query_related_to_subject}): {user_message[:50]}..."
+                )
         except Exception as e:
             print(f"RAG retrieval error: {e}")
             context = ""

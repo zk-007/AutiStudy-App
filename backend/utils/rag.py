@@ -680,13 +680,14 @@ def detect_intent_computer(q: str) -> str:
 
 def allowed_block_types_computer(intent: str) -> set:
     """Allowed block types per intent for Computer (CELL 16)"""
+    base = {"BODY", "EXPLANATION", "DEFINITION", "PROCEDURE", "EXAMPLE", "SLO", "KEY_POINTS"}
     if intent == "DEFINE":
-        return {"DEFINITION", "BODY", "EXPLANATION", "GLOSSARY"}
+        return {"DEFINITION", "BODY", "EXPLANATION", "GLOSSARY", "SLO", "KEY_POINTS"}
     if intent == "PROCEDURE":
-        return {"PROCEDURE", "BODY", "EXPLANATION"}
+        return {"PROCEDURE", "BODY", "EXPLANATION", "SLO"}
     if intent == "CODE":
         return {"CODE", "EXAMPLE", "BODY"}
-    return {"BODY", "EXPLANATION", "DEFINITION", "PROCEDURE", "EXAMPLE"}
+    return base
 
 
 def chroma_dense_computer(query: str, doc_id: str = "CS6", top_k: int = 25) -> List[Dict]:

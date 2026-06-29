@@ -1233,7 +1233,8 @@ async def send_message(
         preferred_format=req.preferred_format,
     )
     reply = reply_result["text"]
-    is_relevant = bool(reply_result.get("is_relevant", True))
+    raw_relevant = reply_result.get("is_relevant")
+    is_relevant = bool(raw_relevant) if raw_relevant is not None else False
 
     # 3. Persist the assistant reply.
     save_message(

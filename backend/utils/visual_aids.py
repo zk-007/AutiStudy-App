@@ -281,9 +281,59 @@ def _has_times_table_signal(text: str) -> bool:
     return any(kw in lower for kw in _TIMES_TABLE_KW) or bool(_TIMES_TABLE_RX.search(text))
 
 
-def _has_geometry_signal(text: str) -> bool:
-    lower = text.lower()
-    return any(kw in lower for kw in _GEOMETRY_KW)
+def _detect_geometry_focus(text: str) -> str:
+    """What to emphasise in the diagram: perimeter, area, both, or neutral shape."""
+    lower = (text or "").lower()
+    has_perimeter = bool(
+        re.search(r"\bperimeter\b|\bcircumference\b|\baround\b|\bboundary\b", lower)
+    )
+    has_area = bool(re.search(r"\barea\b|\bsurface\b|\binside\b|\bsquare units\b", lower))
+    if has_perimeter and not has_area:
+        return "perimeter"
+    if has_area and not has_perimeter:
+        return "area"
+    if has_perimeter and has_area:
+        return "both"
+    return "shape"
+
+
+def _detect_measure_unit(text: str) -> str:
+    if re.search(r"\bcm\b|\bcentimet", text, re.I):
+        return "cm"
+    if re.search(r"\bmm\b|\bmillimet", text, re.I):
+        return "mm"
+    if re.search(r"\bm\b|\bmetre|\bmeter", text, re.I):
+        return "m"
+    return ""
+
+
+def should_use_ai_concept_image(question: str, subject: str) -> bool:
+    """For Maths prefer coded SVG; AI only when the question is abstract."""
+    sub = (subject or "").lower()
+    if "math" not in sub:
+        return True
+    q = (question or "").lower()
+    if _extract_countable_expr(q):
+        return False
+    if _has_geometry_signal(q):
+        return False
+    if _has_fraction_visual_signal(q):
+        return False
+    if _has_number_line_signal(q):
+        return False
+    if _has_factor_signal(q):
+        return False
+    if _has_chart_signal(q):
+        return False
+    if _has_percent_signal(q):
+        return False
+    if _has_times_table_signal(q):
+        return False
+    if _has_ratio_signal(q):
+        return False
+    if _has_symbolic_signal(q):
+        return False
+    return True
 
 
 def _has_ratio_signal(text: str) -> bool:
@@ -1153,6 +1203,8 @@ class GeometryData:
     area: Optional[float]
     perimeter: Optional[float]
     angles: Optional[List[float]]
+    focus: str = "shape"  # perimeter | area | both | shape
+    unit: str = ""
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -1162,12 +1214,17 @@ class GeometryData:
             "area": self.area,
             "perimeter": self.perimeter,
             "angles": self.angles,
+            "focus": self.focus,
+            "unit": self.unit,
         }
 
 
 def build_geometry_data(question: str, history_text: str, client: Any) -> Optional[GeometryData]:
     # First try pure regex for simple cases
-    lower = (question + " " + history_text).lower()
+    combined = f"{question} {history_text}"
+    lower = combined.lower()
+    focus = _detect_geometry_focus(combined)
+    unit = _detect_measure_unit(combined)
     shape: Optional[str] = None
     for s in ("triangle", "rectangle", "square", "circle", "parallelogram", "angle"):
         if s in lower:
@@ -1215,6 +1272,7 @@ def build_geometry_data(question: str, history_text: str, client: Any) -> Option
             title=title_map.get(shape, shape.capitalize()),
             shape=shape, dimensions=dims,
             area=area, perimeter=perimeter, angles=angles,
+            focus=focus, unit=unit,
         )
 
     # Fall back to LLM for complex cases
@@ -1240,6 +1298,8 @@ def build_geometry_data(question: str, history_text: str, client: Any) -> Option
             area=float(data["area"]) if data.get("area") is not None else None,
             perimeter=float(data["perimeter"]) if data.get("perimeter") is not None else None,
             angles=[float(a) for a in data["angles"]] if data.get("angles") else None,
+            focus=str(data.get("focus") or _detect_geometry_focus(combined)),
+            unit=str(data.get("unit") or unit),
         )
     except Exception as err:
         print(f"[visual_aids] geometry LLM extraction failed: {err}")

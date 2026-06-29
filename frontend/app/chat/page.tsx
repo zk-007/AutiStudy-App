@@ -270,6 +270,32 @@ function SubjectPicker({ grade }: { grade: number }) {
 
 // ─── Conversation (the actual tutor chat) ──────────────────────────────────
 
+const ADAPTATION_STUB_PREFIXES = [
+  "let me read this out loud",
+  "here's a picture to help",
+  "did you understand",
+  "great job",
+  "well done",
+  "let's take a breath",
+];
+
+/** Index of the tutor's main answer — skip adaptation-ladder stub bubbles. */
+function findTutorAnswerIndex(messages: ChatMessage[]): number {
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const m = messages[i];
+    if (m.role !== "assistant") continue;
+    const text = m.content?.trim() ?? "";
+    if (text.length < 60) continue;
+    const lower = text.toLowerCase();
+    if (ADAPTATION_STUB_PREFIXES.some((s) => lower.startsWith(s))) continue;
+    return i;
+  }
+  for (let i = messages.length - 1; i >= 0; i--) {
+    if (messages[i].role === "assistant") return i;
+  }
+  return messages.length - 1;
+}
+
 function Conversation({ sessionId }: { sessionId: string }) {
   const { t, locale } = useLocale();
   const router = useRouter();
@@ -685,15 +711,7 @@ function Conversation({ sessionId }: { sessionId: string }) {
       const result = await chatApi.generateVisualAid(sessionId);
       setSession((prev) => {
         if (!prev) return prev;
-        // Agent messages exist only in local state — attach visuals to the
-        // latest assistant bubble here, not the backend's message_index.
-        let targetIndex = prev.messages.length - 1;
-        for (let i = prev.messages.length - 1; i >= 0; i--) {
-          if (prev.messages[i].role === "assistant") {
-            targetIndex = i;
-            break;
-          }
-        }
+        const targetIndex = findTutorAnswerIndex(prev.messages);
         const next = prev.messages.map((m, i) => {
           if (i !== targetIndex) return m;
           const cleared = { image_url: null, math_steps: null, emoji_counting: null, factor_tree: null, fraction_bar: null, number_line: null, bar_chart: null, percentage_bar: null, times_table: null, geometry: null, ratio: null };

@@ -132,17 +132,65 @@ def _extract_countable_expr(text: str) -> Optional[Dict[str, Any]]:
     return {"n1": n1, "n2": n2, "op": op, "result": result}
 
 
+def _is_adaptation_stub(text: str) -> bool:
+    """Short system/adaptation lines — not the substantive tutor explanation."""
+    t = (text or "").strip()
+    if len(t) < 60:
+        return True
+    lowered = t.lower()
+    stubs = (
+        "let me read this out loud",
+        "here's a picture to help",
+        "did you understand",
+        "great job",
+        "well done",
+        "awesome work",
+        "let's take a breath",
+        "let's try a quick quiz",
+        "almost there",
+    )
+    return any(lowered.startswith(s) for s in stubs)
+
+
+def _substantive_assistant_text(
+    history: List[Dict[str, Any]], chars: int = 600,
+) -> str:
+    """Most recent tutor explanation, skipping adaptation ladder stubs."""
+    for msg in reversed(history or []):
+        if msg.get("role") != "assistant":
+            continue
+        content = str(msg.get("content") or "").strip()
+        if not content or _is_adaptation_stub(content):
+            continue
+        return content[:chars]
+    return ""
+
+
+def substantive_assistant_index(history: List[Dict[str, Any]]) -> int:
+    """Index of the tutor's main answer bubble for attaching visual aids."""
+    if not history:
+        return 0
+    for idx in range(len(history) - 1, -1, -1):
+        msg = history[idx]
+        if msg.get("role") != "assistant":
+            continue
+        content = str(msg.get("content") or "").strip()
+        if content and not _is_adaptation_stub(content):
+            return idx
+    for idx in range(len(history) - 1, -1, -1):
+        if history[idx].get("role") == "assistant":
+            return idx
+    return len(history) - 1
+
+
 def _last_assistant_text(history: List[Dict[str, Any]], chars: int = 400) -> str:
-    """Grab a snippet of the most recent assistant reply (for follow-up routing).
+    """Grab a snippet of the most recent substantive assistant reply.
 
     A user saying just "show me" / "how" / "draw it" means *the previous topic*,
     so we look at the assistant's recap to detect symbolic math sneakily hiding
-    in the conversation context.
+    in the conversation context. Adaptation-ladder stub lines are skipped.
     """
-    for msg in reversed(history or []):
-        if msg.get("role") == "assistant" and msg.get("content"):
-            return str(msg["content"])[:chars]
-    return ""
+    return _substantive_assistant_text(history, chars)
 
 
 # ── New-track signal detectors (added for grades 4-6 curriculum) ─────────────

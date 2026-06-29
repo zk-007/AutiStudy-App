@@ -390,7 +390,7 @@ def generate_visual_aid(
         )
     print(f"[chat_engine] visual track for {user_message[:60]!r} -> {track}")
 
-    history_snippet = visual_aids._last_assistant_text(history_list) if visual_aids else ""
+    history_snippet = visual_aids._substantive_assistant_text(history_list) if visual_aids else ""
 
     # ── Track A: countable arithmetic → in-browser emoji illustration ────────
     if track == "countable" and visual_aids is not None:

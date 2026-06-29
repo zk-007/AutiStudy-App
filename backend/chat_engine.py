@@ -191,9 +191,12 @@ _FORMAT_INSTRUCTIONS = {
         "Keep the answer brief (max 6 sentences)."
     ),
     "step_by_step_flowchart": (
-        "\n\nIMPORTANT: Explain using a numbered step-by-step format like a flowchart. "
-        "Each step should be on its own line, short (one sentence). "
-        "Use ➡️ arrows or numbers. Keep it visual and easy to follow."
+        "\n\nIMPORTANT: The student did not understand. Re-teach in simpler words using this format:\n"
+        "1) 3–4 very short sentences (easy words)\n"
+        "2) 2–4 concept flowchart lines: RealWord → next idea → next idea (with emoji). "
+        "NEVER use generic 'Step 1 → Step 2 → Step 3'.\n"
+        "3) 2 emoji-rich example lines from the topic.\n"
+        "Example flow: 🤖 AI → computer → thinks like human → helps daily tasks"
     ),
     "with_visual_description": (
         "\n\nIMPORTANT: Include a short visual description or analogy that paints a picture "

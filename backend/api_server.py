@@ -1883,11 +1883,23 @@ ACTION_PROMPTS = {
         "Example: 'Here's a picture to help! 🎨' Do NOT write ASCII art or long text."
     ),
     "SHOW_FLOWCHART_STEPS": (
-        "Re-explain the ORIGINAL question in a VERY compact way:\n"
-        "- Max 4 short sentences total\n"
-        "- Then one arrow flowchart line like: Step 1 → Step 2 → Step 3\n"
-        "- Then ONE emoji-rich mini example (2 lines max)\n"
-        "No comprehension questions. Stay on topic."
+        "The student did NOT understand the PREVIOUS tutor answer. "
+        "Do NOT repeat the same long paragraph. Re-teach ONLY that answer in simpler words.\n\n"
+        "Required structure (follow exactly):\n"
+        "1) Opening (1 sentence): warm, e.g. 'Let's break this down simply! 🪜'\n"
+        "2) Simple explanation: 3–4 very short sentences using easy words (max 12 words each).\n"
+        "3) Concept flowcharts — 2–4 lines using REAL words from the topic, NOT generic labels:\n"
+        "   Each line: Word → next idea → next idea (add 1 emoji at the end)\n"
+        "   Example for AI:\n"
+        "   🤖 AI → computer system → thinks & learns → like a human\n"
+        "   ✨ AI → helps people → with daily tasks\n"
+        "   NEVER write 'Step 1 → Step 2 → Step 3' — use the actual concepts.\n"
+        "4) Emoji example (2 lines): pick ONE concrete example FROM the previous answer "
+        "and show how it works, e.g.:\n"
+        "   🎶 AI suggests songs you might like based on what you've listened to!\n"
+        "   📚 AI can help you find information quickly!\n\n"
+        "Rules: stay on the SAME topic as the original question; no quiz questions; "
+        "no long bullet lists; emojis encouraged."
     ),
     "USE_VOICE_AID": (
         "Say ONE short friendly sentence before the answer is read aloud. "
@@ -1944,7 +1956,7 @@ async def agent_generate_content(body: ContentGenerateRequest, current=Depends(g
     def _gen():
         from openai import OpenAI
         client = OpenAI()
-        max_tokens = 200 if action == "SHOW_FLOWCHART_STEPS" else (120 if action == "SIMPLIFY_EXPLANATION" else 80)
+        max_tokens = 350 if action == "SHOW_FLOWCHART_STEPS" else (120 if action == "SIMPLIFY_EXPLANATION" else 80)
         resp = client.chat.completions.create(
             model="gpt-4o-mini",
             messages=[

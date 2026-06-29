@@ -29,8 +29,6 @@ import {
   Sparkles,
   AlertCircle,
   BookOpenCheck,
-  ImagePlus,
-  Volume2,
   Loader2,
   Trophy,
   CheckCircle2,
@@ -966,29 +964,9 @@ function Conversation({ sessionId }: { sessionId: string }) {
               // area keeps the UI calm and avoids accidental cost spikes.
               const isLastAssistant =
                 m.role === "assistant" && i === session.messages.length - 1;
-              const showTutorActions = isLastAssistant && !m.skip_tutor;
               return (
                 <div key={`${i}-${m.timestamp}`}>
-                  <Bubble
-                    index={i}
-                    message={m}
-                    showActions={showTutorActions}
-                    imagesAvailable={!!config?.images_available}
-                    speechAvailable={!!config?.speech_available}
-                    onGenerateImage={onGenerateImage}
-                    onSpeak={onSpeak}
-                    imageBusy={imageBusy}
-                    isSpeaking={speakingIndex === i}
-                    speakLabels={{
-                      play: t.pages.chat.readAloud,
-                      stop: t.pages.chat.stopReading,
-                    }}
-                    imageLabels={{
-                      generate: t.pages.chat.showPicture,
-                      regenerate: t.pages.chat.anotherPicture,
-                      generating: t.pages.chat.drawing,
-                    }}
-                  />
+                  <Bubble message={m} />
                   {isLastAssistant &&
                     comprehensionFlow.pendingPopup &&
                     comprehensionFlow.popupGate === "scroll" &&
@@ -1105,20 +1083,6 @@ function Conversation({ sessionId }: { sessionId: string }) {
 }
 
 // ─── Bubbles ────────────────────────────────────────────────────────────────
-
-interface BubbleProps {
-  message: ChatMessage;
-  index: number;
-  showActions?: boolean;
-  imagesAvailable?: boolean;
-  speechAvailable?: boolean;
-  imageBusy?: boolean;
-  isSpeaking?: boolean;
-  onGenerateImage?: () => void;
-  onSpeak?: (index: number, text: string) => void;
-  speakLabels?: { play: string; stop: string };
-  imageLabels?: { generate: string; regenerate: string; generating: string };
-}
 
 /**
  * GPT often writes math using LaTeX-style delimiters like `\( \frac{1}{2} \)`
@@ -2403,33 +2367,12 @@ function MathStepCardView({ card }: { card: import("@/lib/api/client").MathStepC
   );
 }
 
-function Bubble({
-  message,
-  index,
-  showActions = false,
-  imagesAvailable = false,
-  speechAvailable = false,
-  imageBusy = false,
-  isSpeaking = false,
-  onGenerateImage,
-  onSpeak,
-  speakLabels,
-  imageLabels,
-}: BubbleProps) {
+interface BubbleProps {
+  message: ChatMessage;
+}
+
+function Bubble({ message }: BubbleProps) {
   const isUser = message.role === "user";
-  // We deliberately keep the "Show me a picture" button visible *even after*
-  // an image / step card has been attached, so it always sits next to the
-  // Read Aloud button and the action row never visually shrinks. When a
-  // visual aid already exists we relabel the button to make it clear that a
-  // fresh click will regenerate (otherwise students see "Show me a picture"
-  // sitting next to an existing picture and get confused).
-  const hasVisualAid =
-    !!message.image_url || !!message.math_steps || !!message.emoji_counting ||
-    !!message.factor_tree || !!message.fraction_bar || !!message.number_line ||
-    !!message.bar_chart || !!message.percentage_bar || !!message.times_table ||
-    !!message.geometry || !!message.ratio;
-  const showImageButton = showActions && imagesAvailable;
-  const showSpeakButton = showActions && speechAvailable && !!message.content;
 
   return (
     <motion.div
@@ -2513,45 +2456,6 @@ function Bubble({
         {/* KaTeX step card for symbolic math (fractions / algebra / long division) */}
         {message.math_steps && message.math_steps.steps.length > 0 && (
           <MathStepCardView card={message.math_steps} />
-        )}
-
-        {(showImageButton || showSpeakButton) && (
-          <div className="flex flex-wrap gap-2 pt-1">
-            {showImageButton && (
-              <button
-                type="button"
-                onClick={onGenerateImage}
-                disabled={imageBusy}
-                className="inline-flex items-center gap-1.5 rounded-full bg-white/80 hover:bg-white border border-glacier-200 px-3 py-1.5 text-xs font-bold text-deep-soft hover:text-deep transition-all hover:-translate-y-0.5 disabled:opacity-60 disabled:cursor-not-allowed"
-              >
-                {imageBusy ? (
-                  <>
-                    <Loader2 size={13} className="animate-spin" />
-                    {imageLabels?.generating}
-                  </>
-                ) : (
-                  <>
-                    <ImagePlus size={13} />
-                    {hasVisualAid ? imageLabels?.regenerate : imageLabels?.generate}
-                  </>
-                )}
-              </button>
-            )}
-            {showSpeakButton && (
-              <button
-                type="button"
-                onClick={() => onSpeak?.(index, message.content)}
-                className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-bold transition-all hover:-translate-y-0.5 ${
-                  isSpeaking
-                    ? "bg-glacier-500 border-glacier-500 text-white animate-pulse"
-                    : "bg-white/80 hover:bg-white border-glacier-200 text-deep-soft hover:text-deep"
-                }`}
-              >
-                <Volume2 size={13} />
-                {isSpeaking ? speakLabels?.stop : speakLabels?.play}
-              </button>
-            )}
-          </div>
         )}
       </div>
     </motion.div>

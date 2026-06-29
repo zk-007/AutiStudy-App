@@ -504,18 +504,37 @@ def should_auto_generate_image(user_message: str, subject: str, chat_history: Li
 
 def get_image_context(user_message: str, chat_history: List[Dict], subject: str) -> str:
     """
-    Get the full context for image generation, especially for follow-up questions.
+    Build rich context for image generation.
+
+    The tutor's substantive answer is included so DALL·E illustrates the
+    same topic the student was just taught — not a generic related idea.
     """
-    # If it's a follow-up "how" question, include the previous topic
+    from utils.visual_aids import _substantive_assistant_text
+
+    question = user_message.strip()
+    tutor_answer = _substantive_assistant_text(chat_history or [], chars=800)
+
+    # Follow-up "how / show me" — anchor on the previous substantive question
     if is_followup_how_question(user_message) and chat_history:
-        # Find the last user question that was substantive
-        for msg in reversed(chat_history[:-1]):  # Exclude current message
+        for msg in reversed(chat_history[:-1]):
             if msg.get("role") == "user":
                 prev_question = msg.get("content", "")
-                if len(prev_question) > 10:  # Substantive question
-                    return f"{prev_question} - explain how this works visually"
-        
-    return user_message
+                if len(prev_question) > 10:
+                    question = prev_question
+                    break
+
+    if tutor_answer:
+        return (
+            f"Subject: {subject}\n"
+            f"Student question: {question}\n\n"
+            f"Tutor explanation to illustrate (match THIS topic exactly):\n"
+            f"{tutor_answer}\n\n"
+            "Create an educational image that visually explains the same concept "
+            "as the tutor's explanation above. Do NOT illustrate a different or "
+            "generic topic."
+        )
+
+    return question
 
 
 # =========================================================
@@ -582,6 +601,7 @@ Return JSON ONLY in this exact schema:
 Important:
 - The prompt must clearly say where icons go, where arrows go, what labels are allowed, and that only relevant icons should appear.
 - The prompt must explicitly say: no clutter, no decorations, no extra icons.
+- If the input includes a tutor explanation, the image MUST depict THAT specific topic — never a generic or unrelated illustration.
 - For math concept questions, the image should explain the idea by solving one simple example.
 - The JSON must be valid.
 - Output JSON only.
@@ -1112,9 +1132,11 @@ def enhance_image_prompt(question: str, grade: int, subject: str) -> Dict[str, A
         return _normalize_visual_plan(fallback, question, grade, subject)
 
     user_prompt = (
-        f"Question: {question}\n"
+        f"Question and context:\n{question}\n"
         f"Grade: {grade}\n"
         f"Subject: {subject}\n\n"
+        "If a tutor explanation is included, the image MUST illustrate that "
+        "exact topic — not a loosely related or generic idea.\n\n"
         "Build the image plan now."
     )
 

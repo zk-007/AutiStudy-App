@@ -1347,13 +1347,9 @@ async def generate_chat_image(chat_id: str, current=Depends(get_current_user)):
     if not aid:
         raise HTTPException(502, "Visual aid generation failed. Please try again.")
 
-    # Find the target assistant message to attach the aid to (so a refetch
-    # shows it inline). If none exists yet, fall back to the last message.
-    target_index = len(messages) - 1
-    for idx in range(len(messages) - 1, -1, -1):
-        if messages[idx].get("role") == "assistant":
-            target_index = idx
-            break
+    # Attach visual aid to the substantive tutor answer, not adaptation stubs.
+    from utils.visual_aids import substantive_assistant_index
+    target_index = substantive_assistant_index(messages)
 
     kind = aid.get("kind")
     if kind == "image":

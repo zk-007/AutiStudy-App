@@ -21,6 +21,63 @@ GRADE_SUBJECTS = {
     8: ["Maths", "General Science", "Computer Science"],
 }
 
+_MATH_NOTATION_RULES = """
+MATH & SCIENCE NOTATION (critical — never break these):
+- NEVER use dollar-sign LaTeX like $x^2$ or $$\\frac{1}{2}$$ — students see ugly raw symbols
+- NEVER use \\frac, \\times, \\div, \\sqrt as LaTeX commands in questions or options
+- USE plain readable text: 6 × 7, 3/4, x², 2x + 5 = 15, √16, π, ≤, ≥
+- Write each question as a COMPLETE sentence — never cut off mid-question
+- Answer options must be short and fully readable (no LaTeX)
+"""
+
+_LATEX_INLINE_RE = re.compile(r"\$([^$]+)\$")
+_LATEX_DISPLAY_RE = re.compile(r"\$\$([^$]+)\$\$", re.DOTALL)
+
+
+def _latex_to_plain(expr: str) -> str:
+    """Best-effort convert common LaTeX fragments to Unicode for quiz display."""
+    s = (expr or "").strip()
+    replacements = [
+        (r"\\times", "×"),
+        (r"\\div", "÷"),
+        (r"\\pm", "±"),
+        (r"\\leq", "≤"),
+        (r"\\geq", "≥"),
+        (r"\\neq", "≠"),
+        (r"\\sqrt\{([^}]+)\}", r"√\1"),
+        (r"\\pi", "π"),
+        (r"\\cdot", "·"),
+    ]
+    for pat, rep in replacements:
+        s = re.sub(pat, rep, s)
+    s = re.sub(r"\\frac\{([^}]+)\}\{([^}]+)\}", r"\1/\2", s)
+    s = re.sub(r"\^\{([^}]+)\}", r"^\1", s)
+    s = s.replace("^2", "²").replace("^3", "³")
+    s = re.sub(r"\\[a-zA-Z]+", "", s)
+    s = s.replace("{", "").replace("}", "")
+    return re.sub(r"\s+", " ", s).strip()
+
+
+def sanitize_quiz_text(text: Optional[str]) -> str:
+    """Strip LaTeX delimiters and simplify math for child-friendly quiz UI."""
+    if not text:
+        return ""
+    out = str(text)
+    out = _LATEX_DISPLAY_RE.sub(lambda m: _latex_to_plain(m.group(1)), out)
+    out = _LATEX_INLINE_RE.sub(lambda m: _latex_to_plain(m.group(1)), out)
+    return out.strip()
+
+
+def _sanitize_question(q: Dict) -> Dict:
+    """Apply text cleanup to one question dict."""
+    cleaned = dict(q)
+    for key in ("question", "correct", "explanation"):
+        if key in cleaned:
+            cleaned[key] = sanitize_quiz_text(cleaned.get(key))
+    if isinstance(cleaned.get("options"), list):
+        cleaned["options"] = [sanitize_quiz_text(o) for o in cleaned["options"]]
+    return cleaned
+
 _SYSTEM_PROMPT = """You are a friendly quiz generator for an educational app for students with autism.
 
 RULES:
@@ -30,6 +87,7 @@ RULES:
 - One option is clearly correct; the other three are plausible but wrong
 - Include a short, encouraging explanation for the correct answer (1-2 sentences)
 - Topics must be curriculum-appropriate for the grade and subject
+""" + _MATH_NOTATION_RULES + """
 
 RESPONSE FORMAT — return ONLY valid JSON, no markdown, no extra text:
 {
@@ -99,7 +157,7 @@ def generate_quiz_questions(
                 and q.get("explanation")
                 and q["correct"] in q["options"]
             ):
-                valid.append(q)
+                valid.append(_sanitize_question(q))
 
         return valid if valid else None
 
@@ -119,6 +177,7 @@ RULES:
 - One clearly correct answer; three plausible but wrong distractors
 - Short encouraging explanation for the correct answer (1-2 sentences)
 - Match the student's grade level
+""" + _MATH_NOTATION_RULES + """
 
 RESPONSE FORMAT — return ONLY valid JSON:
 {
@@ -179,7 +238,7 @@ def generate_quiz_from_chapter_content(
                 and q.get("explanation")
                 and q["correct"] in q["options"]
             ):
-                valid.append(q)
+                valid.append(_sanitize_question(q))
 
         return valid if valid else None
 
@@ -200,6 +259,7 @@ RULES:
 - One clearly correct answer; three plausible but wrong distractors
 - Short encouraging explanation for the correct answer (1-2 sentences)
 - Match the student's grade level
+""" + _MATH_NOTATION_RULES + """
 
 RESPONSE FORMAT — return ONLY valid JSON:
 {
@@ -285,13 +345,13 @@ def generate_quiz_from_chat(
                 and q.get("explanation")
                 and q["correct"] in q["options"]
             ):
-                valid.append(q)
+                valid.append(_sanitize_question(q))
 
         if not valid:
             return None
 
         return {
-            "topic_summary": data.get("topic_summary", subject),
+            "topic_summary": sanitize_quiz_text(data.get("topic_summary", subject)),
             "questions": valid,
         }
 

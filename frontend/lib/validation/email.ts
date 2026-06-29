@@ -1,27 +1,83 @@
-const DOMAIN_TYPOS: Record<string, string> = {
-  "gmai.com": "gmail.com",
-  "gmial.com": "gmail.com",
-  "gmal.com": "gmail.com",
-  "gmail.co": "gmail.com",
-  "gmail.con": "gmail.com",
-  "gmail.cm": "gmail.com",
-  "gmail.om": "gmail.com",
-  "gamil.com": "gmail.com",
-  "gnail.com": "gmail.com",
-  "gmsil.com": "gmail.com",
-  "gmil.com": "gmail.com",
-  "hotmial.com": "hotmail.com",
-  "hotmal.com": "hotmail.com",
-  "hotmail.con": "hotmail.com",
-  "yaho.com": "yahoo.com",
-  "yahooo.com": "yahoo.com",
-  "outlok.com": "outlook.com",
-  "outllok.com": "outlook.com",
-  "iclod.com": "icloud.com",
-  "icoud.com": "icloud.com",
-};
+/** Practical email format — local@domain.tld */
+const EMAIL_RE =
+  /^[a-zA-Z0-9](?:[a-zA-Z0-9._+-]*[a-zA-Z0-9])?@(?:[a-zA-Z0-9](?:[a-zA-Z0-9-]*[a-zA-Z0-9])?\.)+[a-zA-Z]{2,63}$/;
 
 const DOMAIN_LABEL_RE = /^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/;
+
+/** Real consumer domains — for fuzzy typo detection, not a typo list. */
+const KNOWN_FREE_PROVIDERS = [
+  "gmail.com",
+  "googlemail.com",
+  "hotmail.com",
+  "outlook.com",
+  "live.com",
+  "yahoo.com",
+  "ymail.com",
+  "icloud.com",
+  "proton.me",
+  "protonmail.com",
+] as const;
+
+const TYPO_TLDS = new Set(["co", "con", "cm", "om", "comm", "coml", "cpm"]);
+const TYPO_SIMILARITY = 0.82;
+
+function similarity(a: string, b: string): number {
+  if (a === b) return 1;
+  const longer = a.length >= b.length ? a : b;
+  const shorter = a.length >= b.length ? b : a;
+  if (!longer.length) return 1;
+  const editDistance = levenshtein(longer, shorter);
+  return (longer.length - editDistance) / longer.length;
+}
+
+function levenshtein(a: string, b: string): number {
+  const dp: number[][] = Array.from({ length: a.length + 1 }, () =>
+    Array(b.length + 1).fill(0)
+  );
+  for (let i = 0; i <= a.length; i++) dp[i][0] = i;
+  for (let j = 0; j <= b.length; j++) dp[0][j] = j;
+  for (let i = 1; i <= a.length; i++) {
+    for (let j = 1; j <= b.length; j++) {
+      const cost = a[i - 1] === b[j - 1] ? 0 : 1;
+      dp[i][j] = Math.min(dp[i - 1][j] + 1, dp[i][j - 1] + 1, dp[i - 1][j - 1] + cost);
+    }
+  }
+  return dp[a.length][b.length];
+}
+
+function suggestProviderTypo(domain: string): string | null {
+  if ((KNOWN_FREE_PROVIDERS as readonly string[]).includes(domain)) return null;
+
+  const labels = domain.split(".");
+  if (labels.length < 2) return null;
+
+  const stem = labels[0];
+  const tld = labels[labels.length - 1];
+
+  if (TYPO_TLDS.has(tld)) {
+    for (const known of KNOWN_FREE_PROVIDERS) {
+      const knownStem = known.split(".")[0];
+      if (similarity(stem, knownStem) >= TYPO_SIMILARITY) return known;
+    }
+  }
+
+  let bestMatch: string | null = null;
+  let bestRatio = 0;
+  for (const known of KNOWN_FREE_PROVIDERS) {
+    const knownTld = known.slice(known.lastIndexOf(".") + 1);
+    if (tld !== knownTld) continue;
+    const ratio = similarity(domain, known);
+    if (ratio > bestRatio) {
+      bestRatio = ratio;
+      bestMatch = known;
+    }
+  }
+
+  if (bestMatch && bestRatio >= TYPO_SIMILARITY && domain !== bestMatch) {
+    return bestMatch;
+  }
+  return null;
+}
 
 /** Returns an error message if invalid, otherwise null. */
 export function validateEmail(email: string): string | null {
@@ -37,38 +93,19 @@ export function validateEmail(email: string): string | null {
   const local = raw.slice(0, at).trim();
   const domain = raw.slice(at + 1).trim().toLowerCase();
 
-  if (!local || !domain) return "Please enter a valid email address.";
-  if (local.length > 64) return "The part before @ is too long.";
-  if (local.startsWith(".") || local.endsWith(".")) return "Please enter a valid email address.";
-  if (!domain.includes(".")) {
-    return "Email must use a proper domain (e.g. gmail.com or school.edu.pk).";
+  if (!EMAIL_RE.test(`${local}@${domain}`)) {
+    return "Please enter a valid email address (e.g. name@gmail.com).";
   }
 
-  const labels = domain.split(".");
-  const tld = labels[labels.length - 1];
-  if (!/^[a-z]{2,63}$/.test(tld)) {
-    return "Please use a valid domain extension (e.g. .com, .org, .edu, .pk).";
-  }
-
-  for (const label of labels) {
+  for (const label of domain.split(".")) {
     if (!label || label.length > 63 || !DOMAIN_LABEL_RE.test(label)) {
       return "Please enter a valid email domain.";
     }
   }
 
-  if (DOMAIN_TYPOS[domain]) {
-    return `That email domain looks misspelled. Did you mean ${local}@${DOMAIN_TYPOS[domain]}?`;
-  }
-
-  if (domain.endsWith(".com") && !domain.includes("gmail")) {
-    const stem = domain.slice(0, -4);
-    if (["gmai", "gmial", "gmal", "gamil", "gnail", "gmsil", "gmil"].includes(stem)) {
-      return `That email domain looks misspelled. Did you mean ${local}@gmail.com?`;
-    }
-  }
-
-  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(`${local}@${domain}`)) {
-    return "Please enter a valid email address (e.g. name@gmail.com).";
+  const suggested = suggestProviderTypo(domain);
+  if (suggested) {
+    return `That email domain looks misspelled. Did you mean ${local}@${suggested}?`;
   }
 
   return null;

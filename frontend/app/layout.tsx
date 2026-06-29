@@ -39,16 +39,16 @@ export default function RootLayout({
     <html lang="en" className={`${quicksand.variable} ${inter.variable}`}>
       <body className="antialiased">
         <LocaleProvider>
-          <SettingsProvider>
-            <AuthProvider>
+          <AuthProvider>
+            <SettingsProvider>
               <RoutePersistence />
               <SmoothScrollProvider>
                 <Aurora />
                 {children}
                 <SettingsModal />
               </SmoothScrollProvider>
-            </AuthProvider>
-          </SettingsProvider>
+            </SettingsProvider>
+          </AuthProvider>
         </LocaleProvider>
       </body>
     </html>

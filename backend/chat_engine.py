@@ -484,11 +484,20 @@ def generate_visual_aid(
             import traceback
             print(f"[chat_engine] math step card failed: {err}")
             traceback.print_exc()
-        # If step extraction failed, fall through and try a generic image so
-        # the student isn't left with nothing.
+        # If step extraction failed, fall through — for Maths avoid messy AI diagrams.
+        if visual_aids is not None and not visual_aids.should_use_ai_concept_image(
+            user_message, subject
+        ):
+            print("[chat_engine] skipping AI image for maths — SVG/step preferred")
+            return None
 
-    # ── Track C: concept diagram (existing GPT-planned image) ─────────────
+    # ── Track C: concept diagram (AI image — complex / non-SVG topics only) ──
     if _llm_module is not None:
+        if visual_aids is not None and not visual_aids.should_use_ai_concept_image(
+            user_message, subject
+        ):
+            print("[chat_engine] concept track skipped for maths SVG-eligible question")
+            return None
         try:
             url = _llm_module.generate_image(
                 question=user_message,

@@ -337,6 +337,9 @@ export interface GeometryData {
   area: number | null;
   perimeter: number | null;
   angles: number[] | null;
+  /** perimeter | area | both | shape — controls which parts of the diagram to show */
+  focus?: "perimeter" | "area" | "both" | "shape" | string;
+  unit?: string;
 }
 
 /** Ratio / balance scale: two quantities with simplified ratio. */

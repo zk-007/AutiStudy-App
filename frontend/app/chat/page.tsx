@@ -529,6 +529,36 @@ function Conversation({ sessionId }: { sessionId: string }) {
     comprehensionFlow.mcqActive ||
     comprehensionFlow.showBreathing;
 
+  // Lock page scroll while popup / MCQ / breathing is open (Problem 6)
+  useEffect(() => {
+    const lock =
+      comprehensionFlow.showPopup ||
+      comprehensionFlow.mcqActive ||
+      comprehensionFlow.showBreathing ||
+      chatQuizOpen;
+    if (!lock) return;
+    const prevBody = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    const scroller = scrollRef.current;
+    const prevScroll = scroller?.style.overflow ?? "";
+    if (scroller) scroller.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = prevBody;
+      if (scroller) scroller.style.overflow = prevScroll;
+    };
+  }, [
+    comprehensionFlow.showPopup,
+    comprehensionFlow.mcqActive,
+    comprehensionFlow.showBreathing,
+    chatQuizOpen,
+  ]);
+
+  const showComprehensionPopup =
+    comprehensionFlow.showPopup &&
+    !comprehensionFlow.mcqActive &&
+    !sending &&
+    (session?.messages.some((m) => m.role === "assistant") ?? false);
+
   // ── Camera consent flow ───────────────────────────────────────────────────
   const [consentModalOpen, setConsentModalOpen] = useState(false);
 
@@ -1013,23 +1043,6 @@ function Conversation({ sessionId }: { sessionId: string }) {
                     />
                   )}
                   {isLastAssistant &&
-                    comprehensionFlow.showPopup &&
-                    !comprehensionFlow.mcqActive &&
-                    !sending && (
-                    <UnderstandingCheck
-                      key={`popup-${comprehensionFlow.adaptationRound}-${comprehensionFlow.popupStartedAt}`}
-                      popupKey={`${comprehensionFlow.adaptationRound}-${comprehensionFlow.popupStartedAt}`}
-                      agentTried={comprehensionFlow.adaptationStepsTaken > 0}
-                      typingBlocked={comprehensionFlow.typingBlocked}
-                      popupDancing={comprehensionFlow.popupDancing}
-                      cvHappyMode={comprehensionFlow.cvHappyMode}
-                      promptIndex={comprehensionFlow.popupPromptIndex}
-                      happyPromptIndex={comprehensionFlow.happyPromptIndex}
-                      onUnderstood={() => handleUnderstoodRef.current?.()}
-                      onNotUnderstood={() => handleNotUnderstoodRef.current?.()}
-                    />
-                  )}
-                  {isLastAssistant &&
                     comprehensionFlow.mcqActive &&
                     comprehensionFlow.mcqQuestions[comprehensionFlow.mcqIndex] && (
                     <StepMcqPanel
@@ -1051,6 +1064,45 @@ function Conversation({ sessionId }: { sessionId: string }) {
           </AnimatePresence>
         )}
       </div>
+
+      {/* Fixed “Did you get it?” popup — background chat no longer scrolls behind it */}
+      <AnimatePresence>
+        {showComprehensionPopup && (
+          <>
+            <motion.div
+              key="popup-backdrop"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="fixed inset-0 z-[55] bg-black/20 backdrop-blur-[1px]"
+              aria-hidden
+            />
+            <motion.div
+              key="popup-panel"
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: 20 }}
+              transition={{ duration: 0.25 }}
+              className="fixed inset-x-0 bottom-[5.5rem] md:bottom-28 z-[60] px-4 md:px-6 pointer-events-none"
+            >
+              <div className="max-w-2xl mx-auto pointer-events-auto shadow-2xl rounded-2xl">
+                <UnderstandingCheck
+                  key={`popup-${comprehensionFlow.adaptationRound}-${comprehensionFlow.popupStartedAt}`}
+                  popupKey={`${comprehensionFlow.adaptationRound}-${comprehensionFlow.popupStartedAt}`}
+                  agentTried={comprehensionFlow.adaptationStepsTaken > 0}
+                  typingBlocked={comprehensionFlow.typingBlocked}
+                  popupDancing={comprehensionFlow.popupDancing}
+                  cvHappyMode={comprehensionFlow.cvHappyMode}
+                  promptIndex={comprehensionFlow.popupPromptIndex}
+                  happyPromptIndex={comprehensionFlow.happyPromptIndex}
+                  onUnderstood={() => handleUnderstoodRef.current?.()}
+                  onNotUnderstood={() => handleNotUnderstoodRef.current?.()}
+                />
+              </div>
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
 
       {/* Composer */}
       <div className="border-t border-white/40 px-4 md:px-6 py-4 bg-white/40">
@@ -2160,55 +2212,84 @@ function TimesTableView({ data }: { data: import("@/lib/api/client").TimesTableD
 // ─────────────────────────────────────────────────────────────────────────────
 function GeometryView({ data }: { data: import("@/lib/api/client").GeometryData }) {
   const { title, shape, dimensions: dim, area, perimeter, angles } = data;
+  const focus = data.focus ?? "shape";
+  const unit = data.unit ?? "";
+  const dimLbl = (v: number) => (unit ? `${v} ${unit}` : String(v));
+  const showAreaBadge = (focus === "area" || focus === "both") && area != null;
+  const showPerimeterBadge = (focus === "perimeter" || focus === "both") && perimeter != null;
   const [show, setShow] = React.useState(false);
   React.useEffect(() => { setTimeout(() => setShow(true), 300); }, []);
 
   const ShapeSVG = () => {
     if (shape === "circle") {
       const r = dim.radius ?? 40;
+      const isPerimeter = focus === "perimeter" || focus === "both";
+      const fill = focus === "area" ? "#fef9c3" : "none";
+      const stroke = focus === "perimeter" ? "#2563eb" : "#0891b2";
       return (
-        <svg viewBox="0 0 120 120" className="w-32 h-32">
-          <motion.circle cx="60" cy="60" r="45" fill="#e0f2fe" stroke="#22d3ee" strokeWidth="3"
+        <svg viewBox="0 0 120 120" className="w-36 h-36">
+          <motion.circle cx="60" cy="60" r="45" fill={fill} stroke={stroke} strokeWidth={focus === "perimeter" ? 4 : 3}
             initial={{ scale: 0 }} animate={{ scale: show ? 1 : 0 }}
             transition={{ type: "spring", stiffness: 200 }} style={{ transformOrigin: "60px 60px" }} />
-          <line x1="60" y1="60" x2="105" y2="60" stroke="#0891b2" strokeWidth="2" strokeDasharray="4 2" />
-          <text x="80" y="55" fontSize="11" fill="#0891b2" fontWeight="bold">r={r}</text>
+          <line x1="60" y1="60" x2="105" y2="60" stroke="#2563eb" strokeWidth="2" strokeDasharray="4 2" />
+          <text x="82" y="55" fontSize="11" fill="#2563eb" fontWeight="bold">{dimLbl(r)}</text>
+          {isPerimeter && (
+            <text x="60" y="115" fontSize="10" fill="#2563eb" textAnchor="middle" fontWeight="bold">
+              around the edge
+            </text>
+          )}
         </svg>
       );
     }
     if (shape === "square") {
       const s = dim.side ?? 5;
+      const isPerimeter = focus === "perimeter" || focus === "both";
+      const fill = focus === "perimeter" ? "none" : "#fef9c3";
+      const stroke = focus === "perimeter" ? "#2563eb" : "#ca8a04";
+      const sw = focus === "perimeter" ? 4 : 2;
       return (
-        <svg viewBox="0 0 120 120" className="w-32 h-32">
-          <motion.rect x="15" y="15" width="90" height="90" fill="#fef3c7" stroke="#f59e0b" strokeWidth="3" rx="4"
+        <svg viewBox="0 0 140 140" className="w-40 h-40">
+          <motion.rect x="25" y="25" width="90" height="90" fill={fill} stroke={stroke} strokeWidth={sw} rx="2"
             initial={{ scale: 0 }} animate={{ scale: show ? 1 : 0 }}
-            transition={{ type: "spring", stiffness: 200 }} style={{ transformOrigin: "60px 60px" }} />
-          <text x="60" y="72" fontSize="13" fill="#92400e" textAnchor="middle" fontWeight="bold">{s}</text>
-          <text x="60" y="10" fontSize="10" fill="#92400e" textAnchor="middle">{s}</text>
+            transition={{ type: "spring", stiffness: 200 }} style={{ transformOrigin: "70px 70px" }} />
+          <text x="70" y="18" fontSize="11" fill="#1e40af" textAnchor="middle" fontWeight="bold">{dimLbl(s)}</text>
+          <text x="70" y="128" fontSize="11" fill="#1e40af" textAnchor="middle" fontWeight="bold">{dimLbl(s)}</text>
+          <text x="12" y="74" fontSize="11" fill="#1e40af" textAnchor="middle" fontWeight="bold">{dimLbl(s)}</text>
+          <text x="128" y="74" fontSize="11" fill="#1e40af" textAnchor="middle" fontWeight="bold">{dimLbl(s)}</text>
+          {isPerimeter && (
+            <text x="70" y="72" fontSize="10" fill="#64748b" textAnchor="middle">empty inside</text>
+          )}
         </svg>
       );
     }
     if (shape === "rectangle") {
       const l = dim.length ?? 6, w = dim.width ?? 4;
+      const fill = focus === "perimeter" ? "none" : "#fef9c3";
+      const stroke = focus === "perimeter" ? "#2563eb" : "#ca8a04";
+      const sw = focus === "perimeter" ? 4 : 2;
       return (
-        <svg viewBox="0 0 160 120" className="w-40 h-32">
-          <motion.rect x="10" y="25" width="140" height="70" fill="#fef3c7" stroke="#f59e0b" strokeWidth="3" rx="4"
+        <svg viewBox="0 0 180 130" className="w-44 h-36">
+          <motion.rect x="20" y="30" width="140" height="70" fill={fill} stroke={stroke} strokeWidth={sw} rx="2"
             initial={{ scaleX: 0 }} animate={{ scaleX: show ? 1 : 0 }}
-            transition={{ duration: 0.5 }} style={{ transformOrigin: "80px 60px" }} />
-          <text x="80" y="65" fontSize="12" fill="#92400e" textAnchor="middle" fontWeight="bold">{l}</text>
-          <text x="5" y="65" fontSize="12" fill="#92400e" textAnchor="middle" fontWeight="bold">{w}</text>
+            transition={{ duration: 0.5 }} style={{ transformOrigin: "90px 65px" }} />
+          <text x="90" y="22" fontSize="11" fill="#1e40af" textAnchor="middle" fontWeight="bold">{dimLbl(l)}</text>
+          <text x="90" y="118" fontSize="11" fill="#1e40af" textAnchor="middle" fontWeight="bold">{dimLbl(l)}</text>
+          <text x="8" y="68" fontSize="11" fill="#1e40af" textAnchor="middle" fontWeight="bold">{dimLbl(w)}</text>
+          <text x="172" y="68" fontSize="11" fill="#1e40af" textAnchor="middle" fontWeight="bold">{dimLbl(w)}</text>
         </svg>
       );
     }
     if (shape === "triangle") {
       const b = dim.base ?? 6, h = dim.height ?? 4;
+      const fill = focus === "perimeter" ? "none" : "#d1fae5";
+      const stroke = focus === "perimeter" ? "#2563eb" : "#34d399";
       return (
         <svg viewBox="0 0 120 120" className="w-32 h-32">
-          <motion.polygon points="60,15 110,105 10,105" fill="#d1fae5" stroke="#34d399" strokeWidth="3"
+          <motion.polygon points="60,15 110,105 10,105" fill={fill} stroke={stroke} strokeWidth={focus === "perimeter" ? 4 : 3}
             initial={{ scale: 0 }} animate={{ scale: show ? 1 : 0 }}
             transition={{ type: "spring", stiffness: 180 }} style={{ transformOrigin: "60px 60px" }} />
-          <text x="60" y="115" fontSize="11" fill="#065f46" textAnchor="middle" fontWeight="bold">base={b}</text>
-          <text x="15" y="65" fontSize="11" fill="#065f46" textAnchor="end" fontWeight="bold">h={h}</text>
+          <text x="60" y="115" fontSize="11" fill="#065f46" textAnchor="middle" fontWeight="bold">base={dimLbl(b)}</text>
+          <text x="15" y="65" fontSize="11" fill="#065f46" textAnchor="end" fontWeight="bold">h={dimLbl(h)}</text>
         </svg>
       );
     }
@@ -2243,14 +2324,19 @@ function GeometryView({ data }: { data: import("@/lib/api/client").GeometryData 
         <ShapeSVG />
       </div>
       <div className="flex flex-wrap gap-2 justify-center">
-        {area != null && (
+        {showAreaBadge && (
           <span className="rounded-lg bg-amber-50 border border-amber-200 px-3 py-1 text-xs font-bold text-amber-700">
-            Area = {area}
+            Area = {area}{unit ? ` ${unit}²` : ""}
           </span>
         )}
-        {perimeter != null && (
-          <span className="rounded-lg bg-glacier-50 border border-glacier-200 px-3 py-1 text-xs font-bold text-glacier-700">
-            Perimeter = {perimeter}
+        {showPerimeterBadge && (
+          <span className="rounded-lg bg-blue-50 border border-blue-200 px-3 py-1 text-xs font-bold text-blue-700">
+            Perimeter = {perimeter}{unit ? ` ${unit}` : ""}
+          </span>
+        )}
+        {focus === "perimeter" && perimeter != null && shape === "square" && dim.side != null && (
+          <span className="rounded-lg bg-slate-50 border border-slate-200 px-3 py-1 text-xs font-bold text-slate-700">
+            {dimLbl(dim.side)} + {dimLbl(dim.side)} + {dimLbl(dim.side)} + {dimLbl(dim.side)} = {dimLbl(perimeter)}
           </span>
         )}
         {angles && angles.length > 0 && (

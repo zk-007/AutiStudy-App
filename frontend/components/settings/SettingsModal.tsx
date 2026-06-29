@@ -257,6 +257,8 @@ function AccountSection() {
   const [confirm, setConfirm] = useState("");
   const [showCurrent, setShowCurrent] = useState(false);
   const [showNext, setShowNext]       = useState(false);
+  const [showConfirm, setShowConfirm] = useState(false);
+  const [showDeletePassword, setShowDeletePassword] = useState(false);
   const [status, setStatus] = useState<"idle"|"loading"|"ok"|"err">("idle");
   const [msg, setMsg]       = useState("");
   const [deletePassword, setDeletePassword] = useState("");
@@ -333,7 +335,7 @@ function AccountSection() {
           <input type={showCurrent ? "text" : "password"} value={current} onChange={e => setCurrent(e.target.value)}
             className="w-full rounded-xl border border-glacier-200 px-4 py-2.5 pr-10 text-sm focus:outline-none focus:ring-2 focus:ring-violet-400 bg-white"
             placeholder="••••••••" />
-          <button onClick={() => setShowCurrent(v => !v)} className="absolute right-3 top-[34px] text-deep-muted hover:text-deep">
+          <button type="button" onClick={() => setShowCurrent(v => !v)} className="absolute right-3 top-[34px] text-deep-muted hover:text-deep">
             {showCurrent ? <EyeOff size={15} /> : <Eye size={15} />}
           </button>
         </div>
@@ -344,17 +346,20 @@ function AccountSection() {
           <input type={showNext ? "text" : "password"} value={next} onChange={e => setNext(e.target.value)}
             className="w-full rounded-xl border border-glacier-200 px-4 py-2.5 pr-10 text-sm focus:outline-none focus:ring-2 focus:ring-violet-400 bg-white"
             placeholder="••••••••" />
-          <button onClick={() => setShowNext(v => !v)} className="absolute right-3 top-[34px] text-deep-muted hover:text-deep">
+          <button type="button" onClick={() => setShowNext(v => !v)} className="absolute right-3 top-[34px] text-deep-muted hover:text-deep">
             {showNext ? <EyeOff size={15} /> : <Eye size={15} />}
           </button>
         </div>
 
         {/* Confirm */}
-        <div>
+        <div className="relative">
           <label className="block text-xs text-deep-soft mb-1">{isUr ? "پاس ورڈ دوبارہ لکھیں" : "Confirm new password"}</label>
-          <input type="password" value={confirm} onChange={e => setConfirm(e.target.value)}
-            className="w-full rounded-xl border border-glacier-200 px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-violet-400 bg-white"
+          <input type={showConfirm ? "text" : "password"} value={confirm} onChange={e => setConfirm(e.target.value)}
+            className="w-full rounded-xl border border-glacier-200 px-4 py-2.5 pr-10 text-sm focus:outline-none focus:ring-2 focus:ring-violet-400 bg-white"
             placeholder="••••••••" />
+          <button type="button" onClick={() => setShowConfirm(v => !v)} className="absolute right-3 top-[34px] text-deep-muted hover:text-deep">
+            {showConfirm ? <EyeOff size={15} /> : <Eye size={15} />}
+          </button>
         </div>
 
         {/* Rules */}
@@ -386,15 +391,22 @@ function AccountSection() {
             ? "یہ آپ کا پروفائل، چیٹس، کوئز، اور والدین لنک مستقل طور پر حذف کر دے گا۔ حذف کے بعد آپ اسی CNIC سے دوبارہ رجسٹر کر سکتے ہیں۔"
             : "This permanently deletes your profile, chats, quizzes, and parent link. After deletion, you can register again with the same CNIC."}
         </p>
-        <div>
+        <div className="relative">
           <label className="block text-xs text-rose-800 mb-1">{isUr ? "پاس ورڈ تصدیق" : "Confirm with password"}</label>
           <input
-            type="password"
+            type={showDeletePassword ? "text" : "password"}
             value={deletePassword}
             onChange={(e) => setDeletePassword(e.target.value)}
-            className="w-full rounded-xl border border-rose-200 px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-rose-400 bg-white"
+            className="w-full rounded-xl border border-rose-200 px-4 py-2.5 pr-10 text-sm focus:outline-none focus:ring-2 focus:ring-rose-400 bg-white"
             placeholder="••••••••"
           />
+          <button
+            type="button"
+            onClick={() => setShowDeletePassword(v => !v)}
+            className="absolute right-3 top-[34px] text-rose-400 hover:text-rose-700"
+          >
+            {showDeletePassword ? <EyeOff size={15} /> : <Eye size={15} />}
+          </button>
         </div>
         <label className="flex items-start gap-2 text-xs text-rose-800 cursor-pointer">
           <input

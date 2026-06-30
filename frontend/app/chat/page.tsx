@@ -954,14 +954,22 @@ function Conversation({ sessionId }: { sessionId: string }) {
         ) : (
           <AnimatePresence initial={false}>
             {session.messages.map((m, i) => {
+              let lastAssistantIdx = -1;
+              for (let j = session.messages.length - 1; j >= 0; j--) {
+                if (session.messages[j].role === "assistant") {
+                  lastAssistantIdx = j;
+                  break;
+                }
+              }
               const showFeedback =
                 m.role === "assistant" &&
                 (childLed.pendingFeedbackIndex === i ||
-                  childLed.feedbackByIndex[i] != null);
+                  childLed.feedbackByIndex[i] != null ||
+                  (childLed.needsFeedback && i === lastAssistantIdx));
               return (
                 <div key={`${i}-${m.timestamp}`}>
                   <Bubble message={m} />
-                  {showFeedback && !sending && (
+                  {showFeedback && (
                     <FeedbackBar
                       feedback={childLed.feedbackByIndex[i] ?? null}
                       onUp={() => void childOnThumbsUp(i)}

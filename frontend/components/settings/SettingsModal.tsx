@@ -493,7 +493,7 @@ export function SettingsModal() {
             animate={{ scale: 1, opacity: 1, y: 0 }}
             exit={{ scale: 0.94, opacity: 0, y: 12 }}
             transition={{ duration: 0.25, ease: "easeOut" }}
-            className="w-full max-w-2xl max-h-[88vh] rounded-3xl bg-white/95 shadow-2xl flex flex-col overflow-hidden border border-glacier-100"
+            className="w-full max-w-2xl max-h-[min(88vh,900px)] min-h-0 rounded-3xl bg-white/95 shadow-2xl flex flex-col overflow-hidden border border-glacier-100"
           >
             {/* Header */}
             <div className="flex items-center justify-between px-6 py-4 border-b border-glacier-100 flex-shrink-0">
@@ -507,10 +507,10 @@ export function SettingsModal() {
               </button>
             </div>
 
-            {/* Body: sidebar + content */}
-            <div className="flex flex-1 overflow-hidden">
+            {/* Body: sidebar + content — min-h-0 lets inner overflow-y-auto scroll */}
+            <div className="flex flex-1 min-h-0 overflow-hidden">
               {/* Sidebar */}
-              <nav className="w-44 flex-shrink-0 border-r border-glacier-100 py-3 overflow-y-auto bg-glacier-50/50">
+              <nav className="w-44 flex-shrink-0 min-h-0 border-r border-glacier-100 py-3 overflow-y-auto overscroll-y-contain modal-scroll bg-glacier-50/50">
                 {SIDEBAR.map(item => (
                   <button key={item.id} onClick={() => setActive(item.id)}
                     className={`w-full flex items-center gap-2.5 px-4 py-3 text-sm font-bold transition-all rounded-r-xl mr-2 ${active === item.id ? "bg-white text-violet-700 shadow-sm border-l-2 border-violet-500" : "text-deep-soft hover:text-deep hover:bg-white/60"}`}
@@ -522,8 +522,8 @@ export function SettingsModal() {
                 ))}
               </nav>
 
-              {/* Content */}
-              <div className="flex-1 overflow-y-auto overscroll-y-contain px-6 py-5 bg-gradient-to-br from-violet-50/30 via-white to-purple-50/30">
+              {/* Content — scrollable; extra bottom padding so buttons are not clipped */}
+              <div className="flex-1 min-h-0 overflow-y-auto overscroll-y-contain modal-scroll px-6 py-5 pb-10 bg-gradient-to-br from-violet-50/30 via-white to-purple-50/30">
                 <AnimatePresence mode="wait">
                   <motion.div key={active}
                     initial={{ opacity: 0, x: 10 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -10 }}

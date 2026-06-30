@@ -6,11 +6,31 @@
  *
  * The base URL can be overridden with NEXT_PUBLIC_API_URL — useful when
  * you deploy the API to a remote host (e.g., a Hugging Face Space).
+ *
+ * On Vercel (VERCEL=1) we default to the Railway production API so every
+ * git push deploy works even if the dashboard env var was never set.
  */
 
-export const API_BASE =
-  (typeof process !== "undefined" && process.env.NEXT_PUBLIC_API_URL) ||
-  "http://127.0.0.1:8000";
+const LOCAL_API = "http://127.0.0.1:8000";
+const PRODUCTION_API = "https://autistudy-app-production.up.railway.app";
+
+function resolveApiBase(): string {
+  if (typeof process !== "undefined" && process.env.NEXT_PUBLIC_API_URL) {
+    return process.env.NEXT_PUBLIC_API_URL;
+  }
+  if (typeof process !== "undefined" && process.env.VERCEL === "1") {
+    return PRODUCTION_API;
+  }
+  if (typeof window !== "undefined") {
+    const host = window.location.hostname;
+    if (host !== "localhost" && host !== "127.0.0.1") {
+      return PRODUCTION_API;
+    }
+  }
+  return LOCAL_API;
+}
+
+export const API_BASE = resolveApiBase();
 
 const TOKEN_KEY = "autistudy_token";
 const PARENT_TOKEN_KEY = "autistudy_parent_token";
@@ -110,7 +130,7 @@ export async function api<T = unknown>(
     // user-friendly message instead of the cryptic browser default.
     throw new ApiError(
       0,
-      "Cannot reach the AutiStudy server. Make sure the API is running on http://127.0.0.1:8000.",
+      `Cannot reach the AutiStudy server at ${API_BASE}. Check that the backend is running and CORS is configured.`,
     );
   }
 

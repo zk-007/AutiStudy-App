@@ -1,8 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { useBodyScrollLock } from "@/lib/hooks/useBodyScrollLock";
+import { useBodyScrollLock, useModalWheelScroll } from "@/lib/hooks/useBodyScrollLock";
 import {
   X, Palette, Accessibility, Globe, User, Lock, Info,
   ChevronRight, Check, Eye, EyeOff,
@@ -475,8 +475,10 @@ export function SettingsModal() {
   const { locale } = useLocale();
   const isUr = locale === "ur";
   const [active, setActive] = useState<Section>("appearance");
+  const modalRef = useRef<HTMLDivElement>(null);
 
   useBodyScrollLock(isOpen);
+  useModalWheelScroll(isOpen, modalRef);
 
   const Content = SECTION_CONTENT[active];
 
@@ -489,6 +491,7 @@ export function SettingsModal() {
           onClick={e => { if (e.target === e.currentTarget) closeSettings(); }}
         >
           <motion.div
+            ref={modalRef}
             initial={{ scale: 0.94, opacity: 0, y: 12 }}
             animate={{ scale: 1, opacity: 1, y: 0 }}
             exit={{ scale: 0.94, opacity: 0, y: 12 }}

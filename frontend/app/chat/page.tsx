@@ -2617,7 +2617,7 @@ function RecapModal({
           </h2>
         </div>
 
-        <div className="px-6 py-5 overflow-y-auto overscroll-y-contain flex-1 min-h-0">
+        <div className="px-6 py-5 overflow-y-auto overscroll-y-contain modal-scroll flex-1 min-h-0 pb-10">
           {loading && (
             <div className="flex flex-col items-center gap-3 py-8 text-deep-muted">
               <Loader2 size={28} className="animate-spin text-amber-500" />
@@ -2796,7 +2796,7 @@ function ChatQuizModal({
         animate={{ opacity: 1, y: 0, scale: 1 }}
         exit={{ opacity: 0, y: 40, scale: 0.96 }}
         transition={{ duration: 0.3, ease: "easeOut" }}
-        className="relative w-full max-w-lg mx-4 rounded-3xl bg-white shadow-2xl overflow-hidden max-h-[90vh] overflow-y-auto overscroll-y-contain"
+        className="relative w-full max-w-lg mx-4 rounded-3xl bg-white shadow-2xl overflow-hidden max-h-[90vh] flex flex-col min-h-0"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Close */}
@@ -2807,7 +2807,7 @@ function ChatQuizModal({
           <X size={16} />
         </button>
 
-        <div className="px-6 py-6">
+        <div className="px-6 py-6 overflow-y-auto overscroll-y-contain modal-scroll flex-1 min-h-0 pb-10">
           {/* Loading */}
           {loading && (
             <div className="flex flex-col items-center py-16 gap-4">

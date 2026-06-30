@@ -14,9 +14,17 @@
 const LOCAL_API = "http://127.0.0.1:8000";
 const PRODUCTION_API = "https://autistudy-app-production.up.railway.app";
 
+/** Strip trailing slashes and fix accidental `https://https://` paste mistakes. */
+function normalizeApiBase(raw: string): string {
+  let url = raw.trim().replace(/\/+$/, "");
+  url = url.replace(/^https:\/\/https:\/\//i, "https://");
+  url = url.replace(/^http:\/\/https:\/\//i, "https://");
+  return url;
+}
+
 function resolveApiBase(): string {
   if (typeof process !== "undefined" && process.env.NEXT_PUBLIC_API_URL) {
-    return process.env.NEXT_PUBLIC_API_URL;
+    return normalizeApiBase(process.env.NEXT_PUBLIC_API_URL);
   }
   if (typeof process !== "undefined" && process.env.VERCEL === "1") {
     return PRODUCTION_API;
@@ -118,20 +126,27 @@ export async function api<T = unknown>(
   }
 
   let res: Response;
-  try {
-    res = await fetch(`${API_BASE}${path}`, {
+  const url = `${API_BASE}${path}`;
+  const attempt = async (): Promise<Response> =>
+    fetch(url, {
       method,
       headers,
       body: body ? JSON.stringify(body) : undefined,
       signal,
     });
-  } catch (err) {
-    // Network failure (server down, CORS blocked, etc.) — surface a
-    // user-friendly message instead of the cryptic browser default.
-    throw new ApiError(
-      0,
-      `Cannot reach the AutiStudy server at ${API_BASE}. Check that the backend is running and CORS is configured.`,
-    );
+
+  try {
+    res = await attempt();
+  } catch {
+    await new Promise((r) => setTimeout(r, 1500));
+    try {
+      res = await attempt();
+    } catch {
+      throw new ApiError(
+        0,
+        `Cannot reach the AutiStudy server at ${API_BASE}. The backend may be waking up — wait 10 seconds and try again.`,
+      );
+    }
   }
 
   if (!res.ok) {

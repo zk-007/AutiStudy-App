@@ -145,14 +145,15 @@ export function useChildLedFlow({
     }
     apiGetPrefs()
       .then(setPreferences)
-      .catch(() =>
+      .catch(() => {
+        // Network fail — treat as not onboarded so wizard runs again
         setPreferences({
           setup_complete: false,
           modality_order: [...ALL_MODALITIES],
           modality_scores: {},
           effective_order: [...ALL_MODALITIES],
-        }),
-      )
+        });
+      })
       .finally(() => setPrefsLoaded(true));
   }, [studentEmail]);
 

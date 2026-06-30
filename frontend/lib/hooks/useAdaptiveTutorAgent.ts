@@ -226,6 +226,22 @@ export function useAdaptiveTutorAgent({
       return false;
     }
 
+    if (video.readyState < 2) {
+      await new Promise<void>((resolve) => {
+        const done = () => {
+          video.removeEventListener("loadeddata", done);
+          resolve();
+        };
+        video.addEventListener("loadeddata", done, { once: true });
+        setTimeout(resolve, 2500);
+      });
+      try {
+        if (video.paused) await video.play();
+      } catch {
+        return false;
+      }
+    }
+
     return video.readyState >= 2 && video.videoWidth > 0 && video.videoHeight > 0;
   }, []);
 
@@ -305,28 +321,27 @@ export function useAdaptiveTutorAgent({
   const calibrationTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const runAutoCalibration = useCallback(() => {
-    // Wait 5 seconds for the student to settle, then snapshot the buffer
+    if (calibrationTimerRef.current) clearTimeout(calibrationTimerRef.current);
     calibrationTimerRef.current = setTimeout(() => {
       const avg = bufferRef.current.average;
-      if (!avg || avg.facePresenceRatio < 0.5 || !studentEmail) return;
-      // Only save if we don't have a baseline yet
-      if (baselineRef.current) return;
-      const baseline: StudentBaseline = {
-        browDown:        avg.browDown,
-        browInnerUp:     avg.browInnerUp,
-        smile:           avg.smile,
-        ear:             avg.ear,
-        headYaw:         avg.headYaw,
-        headPitch:       avg.headPitch,
-        normalBlinkRate: Math.max(5, avg.blinkRate), // floor at 5 bpm
-        capturedAt:      Date.now(),
-        studentEmail,
-      };
-      baselineRef.current = baseline;
+      if (avg && avg.facePresenceRatio >= 0.5 && studentEmail && !baselineRef.current) {
+        const baseline: StudentBaseline = {
+          browDown:        avg.browDown,
+          browInnerUp:     avg.browInnerUp,
+          smile:           avg.smile,
+          ear:             avg.ear,
+          headYaw:         avg.headYaw,
+          headPitch:       avg.headPitch,
+          normalBlinkRate: Math.max(5, avg.blinkRate),
+          capturedAt:      Date.now(),
+          studentEmail,
+        };
+        baselineRef.current = baseline;
+        try {
+          localStorage.setItem(BASELINE_KEY_PREFIX + studentEmail, JSON.stringify(baseline));
+        } catch {}
+      }
       setState((p) => ({ ...p, isCalibrated: true }));
-      try {
-        localStorage.setItem(BASELINE_KEY_PREFIX + studentEmail, JSON.stringify(baseline));
-      } catch {}
     }, 5000);
   }, [studentEmail]);
 

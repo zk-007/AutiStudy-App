@@ -218,8 +218,14 @@ export function useChildLedFlow({
         await deliverModality("voice", answerText, question);
       } else if (first === "image") {
         await deliverModality("image", answerText, question);
+      } else if (first === "steps" && preferredFormatForModality("steps") !== "normal") {
+        const hasSteps =
+          /step\s*\d|^\s*\d+\.|→|➡|flowchart/i.test(answerText) ||
+          answerText.split("\n").filter((l) => l.trim()).length >= 4;
+        if (!hasSteps) {
+          await deliverModality("steps", answerText, question);
+        }
       }
-      // text / steps: answer already delivered via chat send format
     },
     [deliverModality, getFirstModality],
   );

@@ -1241,6 +1241,10 @@ async def send_message(
     reply = reply_result["text"]
     raw_relevant = reply_result.get("is_relevant")
     is_relevant = bool(raw_relevant) if raw_relevant is not None else False
+    query_related = reply_result.get("query_related_to_subject")
+    query_related_to_subject = (
+        bool(query_related) if query_related is not None else True
+    )
 
     # 3. Persist the assistant reply.
     save_message(
@@ -1258,6 +1262,7 @@ async def send_message(
         "user_message": _serialise_session(refreshed)["messages"][-2] if len(msgs) >= 2 else None,
         "assistant_message": _serialise_session(refreshed)["messages"][-1],
         "is_relevant": is_relevant,
+        "query_related_to_subject": query_related_to_subject,
         "session": {
             "id": refreshed["id"],
             "title": refreshed.get("title"),

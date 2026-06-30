@@ -403,6 +403,7 @@ export interface SendMessageResponse {
   user_message: ChatMessage | null;
   assistant_message: ChatMessage;
   is_relevant?: boolean;
+  query_related_to_subject?: boolean;
   session: {
     id: string;
     title: string | null;

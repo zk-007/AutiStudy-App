@@ -55,7 +55,7 @@ import { ModalityPickerModal } from "@/components/child-led/ModalityPickerModal"
 import { PostBreathingChoiceModal } from "@/components/child-led/PostBreathingChoiceModal";
 import { useChildLedFlow } from "@/lib/hooks/useChildLedFlow";
 import { useBodyScrollLock } from "@/lib/hooks/useBodyScrollLock";
-import { shouldShowComprehensionPopup } from "@/lib/agent/comprehensionGate";
+import { shouldEnableChildLedFeedback } from "@/lib/agent/comprehensionGate";
 import { mergeVisualAidIntoMessage } from "@/lib/chat/mergeVisualAid";
 import type { GenerateVisualAidOptions } from "@/lib/api/client";
 import { playTtsAudio } from "@/lib/audio/playTtsAudio";
@@ -585,7 +585,7 @@ function Conversation({ sessionId }: { sessionId: string }) {
       try {
         const preferredFormat = childGetPreferredFormat();
         const reply = await chatApi.send(sessionId, content, preferredFormat);
-        const isBookAnswer = shouldShowComprehensionPopup(reply);
+        const isBookAnswer = shouldEnableChildLedFeedback(reply);
         let assistantIndex = 0;
         let answerText = "";
         setSession((prev) => {
@@ -933,7 +933,7 @@ function Conversation({ sessionId }: { sessionId: string }) {
         </div>
       )}
 
-      <ChatInstructionBanner />
+      {needsFeedback && <ChatInstructionBanner />}
 
       {imageError && (
         <div className="px-4 md:px-6 pt-3">

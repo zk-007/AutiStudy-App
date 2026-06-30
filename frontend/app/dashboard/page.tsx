@@ -21,6 +21,7 @@ import { Footer } from "@/components/layout/Footer";
 import { useLocale } from "@/lib/i18n/LocaleProvider";
 import { useAuth } from "@/lib/auth/AuthProvider";
 import { loginUrlFor } from "@/lib/auth/redirect";
+import { useLearningOnboardingRedirect } from "@/lib/hooks/useLearningOnboardingRedirect";
 import {
   userApi,
   type Stats,
@@ -34,6 +35,7 @@ export default function DashboardPage() {
   const { t, locale } = useLocale();
   const { user, isAuthenticated, isLoading: authLoading } = useAuth();
   const router = useRouter();
+  const { ready: onboardingReady } = useLearningOnboardingRedirect();
 
   const [stats, setStats] = useState<Stats | null>(null);
   const [subjects, setSubjects] = useState<Subject[] | null>(null);
@@ -86,6 +88,17 @@ export default function DashboardPage() {
         <NavBar />
         <div className="flex items-center justify-center min-h-screen">
           <div className="text-deep-soft animate-pulse">{t.pages.dashboard.loading}</div>
+        </div>
+      </main>
+    );
+  }
+
+  if (!onboardingReady) {
+    return (
+      <main className="relative min-h-screen">
+        <NavBar />
+        <div className="flex items-center justify-center min-h-screen">
+          <div className="text-deep-soft animate-pulse">Loading your learning style…</div>
         </div>
       </main>
     );

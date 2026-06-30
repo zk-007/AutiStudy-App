@@ -175,7 +175,7 @@ export function AdaptiveAgentPanel({ state, videoRef, onStart, onStop }: Adaptiv
                         autoPlay
                         muted
                         playsInline
-                        className="w-full h-full object-cover scale-x-[-1]"
+                        className="w-full h-full min-h-[120px] object-cover scale-x-[-1] bg-black"
                       />
                       {mediaPipeLoading && (
                         <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/40 text-white gap-2">
@@ -303,7 +303,7 @@ export function AdaptiveAgentPanel({ state, videoRef, onStart, onStop }: Adaptiv
                           ? "bg-green-100 text-green-700"
                           : "bg-amber-100 text-amber-700"
                       }`}>
-                        {state.isCalibrated ? "✓ Calibrated" : "⏳ Calibrating 5s…"}
+                        {state.isCalibrated ? "✓ Monitoring active" : "⏳ Calibrating 5s…"}
                       </span>
                     </div>
                     {state.debugReason && (

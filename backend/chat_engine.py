@@ -466,6 +466,8 @@ def generate_visual_aid(
         if ratio is not None:
             return {"kind": "ratio", "ratio": ratio.to_dict()}
 
+    symbolic_steps_failed = False
+
     # ── Track B: symbolic math → KaTeX step card ──────────────────────────
     if track == "symbolic" and visual_aids is not None and _llm_module is not None:
         try:
@@ -484,17 +486,15 @@ def generate_visual_aid(
             import traceback
             print(f"[chat_engine] math step card failed: {err}")
             traceback.print_exc()
-        # If step extraction failed, fall through — for Maths avoid messy AI diagrams.
-        if visual_aids is not None and not visual_aids.should_use_ai_concept_image(
-            user_message, subject
-        ):
-            print("[chat_engine] skipping AI image for maths — SVG/step preferred")
-            return None
+        symbolic_steps_failed = True
+        print("[chat_engine] symbolic steps unavailable — falling back to AI image if allowed")
 
     # ── Track C: concept diagram (AI image — complex / non-SVG topics only) ──
     if _llm_module is not None:
-        if visual_aids is not None and not visual_aids.should_use_ai_concept_image(
-            user_message, subject
+        if (
+            visual_aids is not None
+            and not symbolic_steps_failed
+            and not visual_aids.should_use_ai_concept_image(user_message, subject)
         ):
             print("[chat_engine] concept track skipped for maths SVG-eligible question")
             return None

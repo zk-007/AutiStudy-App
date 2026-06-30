@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, type RefObject } from "react";
 
 let lockCount = 0;
 let savedScrollY = 0;
@@ -12,6 +12,20 @@ type LenisLike = { stop: () => void; start: () => void };
 function getLenis(): LenisLike | null {
   if (typeof window === "undefined") return null;
   return (window as unknown as { __lenis?: LenisLike }).__lenis ?? null;
+}
+
+function findScrollableInModal(modal: HTMLElement, target: EventTarget | null): HTMLElement | null {
+  let el = target as HTMLElement | null;
+  while (el && el !== modal) {
+    if (el.classList.contains("modal-scroll")) return el;
+    const style = window.getComputedStyle(el);
+    const canScroll = el.scrollHeight > el.clientHeight + 2;
+    if (canScroll && (style.overflowY === "auto" || style.overflowY === "scroll")) {
+      return el;
+    }
+    el = el.parentElement;
+  }
+  return modal.querySelector<HTMLElement>(".modal-scroll");
 }
 
 /**
@@ -57,4 +71,43 @@ export function useBodyScrollLock(locked: boolean) {
       }
     };
   }, [locked]);
+}
+
+/**
+ * Route mouse-wheel / trackpad scroll to modal inner panels while Lenis is stopped.
+ * Without this, only dragging the scrollbar works.
+ */
+export function useModalWheelScroll(
+  open: boolean,
+  modalRef: RefObject<HTMLElement | null>,
+) {
+  useEffect(() => {
+    if (!open) return;
+
+    const onWheel = (e: WheelEvent) => {
+      const modal = modalRef.current;
+      if (!modal || !modal.contains(e.target as Node)) return;
+
+      const scrollEl = findScrollableInModal(modal, e.target);
+      if (!scrollEl) return;
+
+      const { scrollTop, scrollHeight, clientHeight } = scrollEl;
+      const maxScroll = scrollHeight - clientHeight;
+      if (maxScroll <= 0) return;
+
+      const next = Math.max(0, Math.min(maxScroll, scrollTop + e.deltaY));
+      if (next === scrollTop) {
+        e.preventDefault();
+        e.stopPropagation();
+        return;
+      }
+
+      scrollEl.scrollTop = next;
+      e.preventDefault();
+      e.stopPropagation();
+    };
+
+    window.addEventListener("wheel", onWheel, { passive: false, capture: true });
+    return () => window.removeEventListener("wheel", onWheel, { capture: true });
+  }, [open, modalRef]);
 }

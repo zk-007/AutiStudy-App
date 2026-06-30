@@ -54,7 +54,7 @@ import { FeedbackBar } from "@/components/child-led/FeedbackBar";
 import { ModalityPickerModal } from "@/components/child-led/ModalityPickerModal";
 import { PostBreathingChoiceModal } from "@/components/child-led/PostBreathingChoiceModal";
 import { useChildLedFlow } from "@/lib/hooks/useChildLedFlow";
-import { useBodyScrollLock } from "@/lib/hooks/useBodyScrollLock";
+import { useBodyScrollLock, useModalWheelScroll } from "@/lib/hooks/useBodyScrollLock";
 import { shouldEnableChildLedFeedback } from "@/lib/agent/comprehensionGate";
 import { mergeVisualAidIntoMessage } from "@/lib/chat/mergeVisualAid";
 import type { GenerateVisualAidOptions } from "@/lib/api/client";
@@ -2578,20 +2578,23 @@ function RecapModal({
   onClose: () => void;
   onRefresh: () => void;
 }) {
+  const modalRef = React.useRef<HTMLDivElement>(null);
   useBodyScrollLock(true);
+  useModalWheelScroll(true, modalRef);
 
   return (
     <motion.div
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
-      className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40 backdrop-blur-sm p-4"
+      className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40 backdrop-blur-sm p-4 overflow-hidden overscroll-none"
       role="dialog"
       aria-modal="true"
       aria-label="Session recap"
       onClick={onClose}
     >
       <motion.div
+        ref={modalRef}
         initial={{ opacity: 0, y: 40, scale: 0.96 }}
         animate={{ opacity: 1, y: 0, scale: 1 }}
         exit={{ opacity: 0, y: 40, scale: 0.96 }}
@@ -2705,7 +2708,9 @@ function ChatQuizModal({
   onClose: () => void;
   onRetake: () => void;
 }) {
+  const modalRef = React.useRef<HTMLDivElement>(null);
   useBodyScrollLock(true);
+  useModalWheelScroll(true, modalRef);
 
   const [qIndex, setQIndex] = React.useState(0);
   const [selected, setSelected] = React.useState<string | null>(null);
@@ -2786,12 +2791,13 @@ function ChatQuizModal({
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
-      className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40 backdrop-blur-sm p-4"
+      className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40 backdrop-blur-sm p-4 overflow-hidden overscroll-none"
       role="dialog"
       aria-modal="true"
       onClick={onClose}
     >
       <motion.div
+        ref={modalRef}
         initial={{ opacity: 0, y: 40, scale: 0.96 }}
         animate={{ opacity: 1, y: 0, scale: 1 }}
         exit={{ opacity: 0, y: 40, scale: 0.96 }}

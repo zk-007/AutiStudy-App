@@ -8,9 +8,41 @@
  * you deploy the API to a remote host (e.g., a Hugging Face Space).
  */
 
-export const API_BASE =
-  (typeof process !== "undefined" && process.env.NEXT_PUBLIC_API_URL) ||
-  "http://127.0.0.1:8000";
+/**
+ * The base URL can be overridden with NEXT_PUBLIC_API_URL — useful when
+ * you deploy the API to a remote host (e.g., a Hugging Face Space).
+ *
+ * On Vercel (VERCEL=1) we default to the Railway production API so every
+ * git push deploy works even if the dashboard env var was never set.
+ */
+
+const LOCAL_API = "http://127.0.0.1:8000";
+const PRODUCTION_API = "https://autistudy-app-production.up.railway.app";
+
+function normalizeApiBase(raw: string): string {
+  let url = raw.trim().replace(/\/+$/, "");
+  url = url.replace(/^https:\/\/https:\/\//i, "https://");
+  url = url.replace(/^http:\/\/https:\/\//i, "https://");
+  return url;
+}
+
+function resolveApiBase(): string {
+  if (typeof process !== "undefined" && process.env.NEXT_PUBLIC_API_URL) {
+    return normalizeApiBase(process.env.NEXT_PUBLIC_API_URL);
+  }
+  if (typeof process !== "undefined" && process.env.VERCEL === "1") {
+    return PRODUCTION_API;
+  }
+  if (typeof window !== "undefined") {
+    const host = window.location.hostname;
+    if (host !== "localhost" && host !== "127.0.0.1") {
+      return PRODUCTION_API;
+    }
+  }
+  return LOCAL_API;
+}
+
+export const API_BASE = resolveApiBase();
 
 const TOKEN_KEY = "autistudy_token";
 const PARENT_TOKEN_KEY = "autistudy_parent_token";

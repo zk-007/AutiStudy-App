@@ -187,9 +187,7 @@ function ChildSignupForm({
   const continueToApp = () => {
     sessionStorage.removeItem("autistudy_show_family_code");
     clearReturnUrl();
-    router.push(
-      `/onboarding/learning-style?next=${encodeURIComponent(nextUrl)}`,
-    );
+    router.push(nextUrl);
   };
 
   if (familyCode) {
@@ -208,7 +206,7 @@ function ChildSignupForm({
           Your parent will need this code plus your name, CNIC, and the parent details you entered.
         </p>
         <DancingButton type="button" variant="primary" fullWidth onClick={continueToApp}>
-          Continue — pick how you learn
+          Continue to dashboard
         </DancingButton>
       </div>
     );

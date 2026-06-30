@@ -22,11 +22,9 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { FaceLandmarker, FaceLandmarkerResult } from "@mediapipe/tasks-vision";
 import type { FaceSignal } from "@/lib/agent/types";
+import { loadVisionModule, MEDIAPIPE_MODEL, MEDIAPIPE_WASM } from "@/lib/mediapipe/visionLoader";
 
-const MEDIAPIPE_WASM =
-  "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.35/wasm";
-const MODEL_URL =
-  "https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task";
+const MODEL_URL = MEDIAPIPE_MODEL;
 
 const ANALYZE_INTERVAL_MS = 67; // target ~15fps for analysis (not camera fps)
 
@@ -114,7 +112,7 @@ export function useMediaPipeEmotion(
     setState((p) => ({ ...p, loading: true, error: null }));
     for (const delegate of ["GPU", "CPU"] as const) {
       try {
-        const { FaceLandmarker, FilesetResolver } = await import("@mediapipe/tasks-vision");
+        const { FaceLandmarker, FilesetResolver } = await loadVisionModule();
         const fs = await FilesetResolver.forVisionTasks(MEDIAPIPE_WASM);
         const lm = await FaceLandmarker.createFromOptions(fs, {
           baseOptions: { modelAssetPath: MODEL_URL, delegate },

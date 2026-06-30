@@ -46,17 +46,17 @@ import { useSettings } from "@/lib/settings/SettingsContext";
 import { useAdaptiveTutorAgent, getCameraConsent, setCameraConsent, containsConfusion } from "@/lib/hooks/useAdaptiveTutorAgent";
 import type { PolicyResult } from "@/lib/agent/ComprehensionStateMachine";
 import type { AgentActionPayload } from "@/lib/agent/mediaAgentTypes";
+import { resolveAgentContent, resolveSideEffects } from "@/lib/agent/mediaAgentTools";
 import { AdaptiveAgentPanel } from "@/components/agent/AdaptiveAgentPanel";
 import { CameraConsentModal } from "@/components/agent/CameraConsentModal";
+import { UnderstandingCheck } from "@/components/agent/UnderstandingCheck";
 import { BreathingModal } from "@/components/agent/BreathingModal";
-import { ChatInstructionBanner } from "@/components/child-led/ChatInstructionBanner";
-import { FeedbackBar } from "@/components/child-led/FeedbackBar";
-import { ModalityPickerModal } from "@/components/child-led/ModalityPickerModal";
-import { PostBreathingChoiceModal } from "@/components/child-led/PostBreathingChoiceModal";
-import { useChildLedFlow } from "@/lib/hooks/useChildLedFlow";
+import { StepMcqPanel } from "@/components/agent/StepMcqPanel";
+import { useComprehensionFlow } from "@/lib/hooks/useComprehensionFlow";
 import { useBodyScrollLock, useModalWheelScroll } from "@/lib/hooks/useBodyScrollLock";
-import { shouldEnableChildLedFeedback } from "@/lib/agent/comprehensionGate";
+import { shouldShowComprehensionPopup } from "@/lib/agent/comprehensionGate";
 import { mergeVisualAidIntoMessage } from "@/lib/chat/mergeVisualAid";
+import { normalizeMath } from "@/lib/chat/normalizeMath";
 import type { GenerateVisualAidOptions } from "@/lib/api/client";
 import { playTtsAudio } from "@/lib/audio/playTtsAudio";
 import { loginUrlFor } from "@/lib/auth/redirect";
@@ -321,6 +321,7 @@ function Conversation({ sessionId }: { sessionId: string }) {
   const [speakingIndex, setSpeakingIndex] = useState<number | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const scrollRef = useRef<HTMLDivElement | null>(null);
+  const answerEndRef = useRef<HTMLDivElement | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
 
   // ── Chat quiz state ───────────────────────────────────────────────────────
@@ -344,15 +345,15 @@ function Conversation({ sessionId }: { sessionId: string }) {
   const agentAttemptsRef = useRef(0);  // avoids circular ref: adaptiveState → useMemo → hook
   const lastUserQRef = useRef("");
   const sessionRef = useRef(session);
-  const onGenerateImageRef = useRef<
-    ((options?: GenerateVisualAidOptions) => Promise<void>) | null
-  >(null);
+  const onGenerateImageRef = useRef<(() => void) | null>(null);
   const onSpeakRef = useRef<((index: number, text: string) => Promise<void>) | null>(null);
   const speakForFlowRef = useRef<((text: string) => Promise<void>) | null>(null);
   const imageBusyRef = useRef(false);
   const sendingRef = useRef(false);
   const speakingIndexRef = useRef<number | null>(null);
   const ttsAutoReadRef = useRef(settings.ttsAutoRead);
+  const cameraBootstrappedRef = useRef(false);
+  const cameraUserStoppedRef = useRef(false);
 
   sessionRef.current = session;
   ttsAutoReadRef.current = settings.ttsAutoRead;
@@ -360,12 +361,68 @@ function Conversation({ sessionId }: { sessionId: string }) {
   sendingRef.current = sending;
   speakingIndexRef.current = speakingIndex;
 
-  const executeAgentTool = useCallback(
-    (_decision: PolicyResult, _payload?: AgentActionPayload) => {
-      // Child-led v2: Media Agent observes only — no auto interventions.
-    },
-    [],
-  );
+  /** Resolve text to read aloud for voice-aid tools. */
+  const getVoiceText = useCallback((
+    payload: AgentActionPayload,
+    content: string,
+    messages: ChatMessage[],
+  ): string => {
+    if (
+      payload.localAction === "USE_VOICE_AID" ||
+      payload.tool === "speak_aloud"
+    ) {
+      const prior = messages.filter((m) => m.role === "assistant");
+      // Read the last substantive explanation, not the short intro stub
+      for (let i = prior.length - 1; i >= 0; i--) {
+        const text = prior[i]?.content ?? "";
+        if (text.length > 80) return text;
+      }
+      return prior[prior.length - 1]?.content ?? content;
+    }
+    return content;
+  }, []);
+
+  const executeAgentTool = useCallback((
+    _decision: PolicyResult,
+    payload?: AgentActionPayload,
+  ) => {
+    if (!payload) return;
+    const content = resolveAgentContent(payload);
+    if (!content) return;
+
+    agentAttemptsRef.current += 1;
+    const priorMessages = sessionRef.current?.messages ?? [];
+
+    setSession((prev) => {
+      if (!prev) return prev;
+      return {
+        ...prev,
+        messages: [
+          ...prev.messages,
+          {
+            role: "assistant" as const,
+            content,
+            timestamp: new Date().toISOString(),
+            image_url: null,
+          },
+        ],
+      };
+    });
+
+    const effects = resolveSideEffects(payload);
+    if (effects.triggerImage && !imageBusyRef.current && !sendingRef.current) {
+      setTimeout(() => onGenerateImageRef.current?.(), 500);
+    }
+    if (
+      effects.triggerVoice &&
+      ttsAutoReadRef.current &&
+      speakingIndexRef.current === null &&
+      !sendingRef.current
+    ) {
+      const voiceText = getVoiceText(payload, content, priorMessages);
+      setTimeout(() => onSpeakRef.current?.(-1, voiceText), 700);
+    }
+  }, [getVoiceText]);
 
   // agentLearningSignals is declared BEFORE useAdaptiveTutorAgent
   // and uses agentAttemptsRef (not adaptiveState) to avoid TDZ
@@ -391,9 +448,13 @@ function Conversation({ sessionId }: { sessionId: string }) {
   const {
     state: adaptiveState,
     videoRef: agentVideoRef,
+    setVideoElement: agentSetVideoElement,
     startCamera: agentStartCamera,
     stopCamera: agentStopCamera,
     onStudentNewMessage: agentOnStudentNewMessage,
+    submitFeedback: agentSubmitFeedback,
+    onStudentUnderstood: agentOnUnderstood,
+    getPreferredFormat: agentGetPreferredFormat,
   } = useAdaptiveTutorAgent({
     sessionId,
     currentTopic: session?.subject ?? "",
@@ -421,8 +482,7 @@ function Conversation({ sessionId }: { sessionId: string }) {
     });
   }, []);
 
-  // ── Child-led adaptive flow (v2) ─────────────────────────────────────────
-  const childLedCallbacks = useMemo(
+  const comprehensionCallbacks = useMemo(
     () => ({
       onAppendMessage: appendAssistantMessage,
       onGenerateImage: async (options?: GenerateVisualAidOptions) => {
@@ -430,66 +490,94 @@ function Conversation({ sessionId }: { sessionId: string }) {
       },
       onSpeak: (text: string) =>
         speakForFlowRef.current?.(text) ?? Promise.resolve(),
-      getAssistantIndex: () => {
-        const msgs = sessionRef.current?.messages ?? [];
-        for (let i = msgs.length - 1; i >= 0; i--) {
-          if (msgs[i].role === "assistant") return i;
-        }
-        return Math.max(0, msgs.length - 1);
-      },
     }),
     [appendAssistantMessage],
   );
 
+  const lastUserQuestion = useMemo(() => {
+    const msgs = session?.messages ?? [];
+    const userMsgs = msgs.filter((m) => m.role === "user");
+    return userMsgs[userMsgs.length - 1]?.content ?? "";
+  }, [session?.messages]);
+
+  const lastAssistantAnswer = useMemo(() => {
+    const msgs = session?.messages ?? [];
+    const asst = msgs.filter((m) => m.role === "assistant");
+    return asst[asst.length - 1]?.content ?? "";
+  }, [session?.messages]);
+
   const {
-    state: childLed,
-    onNewUserQuestion: childOnNewQuestion,
-    onBookAnswer: childOnBookAnswer,
-    onThumbsUp: childOnThumbsUp,
-    onThumbsDown: childOnThumbsDown,
-    onPickModality: childOnPickModality,
-    onSkipQuestion: childOnSkipQuestion,
-    onAttemptSendWithoutFeedback: childOnAttemptBlocked,
-    onBreathingComplete: childOnBreathingComplete,
-    onRetrySameQuestion: childOnRetrySameQuestion,
-    onNewQuestionAfterBreak: childOnNewQuestionAfterBreak,
-    getPreferredSendFormat: childGetPreferredFormat,
-    getFirstModality: childGetFirstModality,
-  } = useChildLedFlow({
+    flow: comprehensionFlow,
+    onAssistantAnswer: flowOnAssistantAnswer,
+    onStudentQuestion: flowOnStudentQuestion,
+    onPopupYes: flowOnPopupYes,
+    onPopupNo: flowOnPopupNo,
+    onAttemptSendWhileBlocked: flowOnAttemptBlocked,
+    onBreathingComplete: flowOnBreathingComplete,
+    onMcqAnswered: flowOnMcqAnswered,
+  } = useComprehensionFlow({
     sessionId,
     subject: session?.subject ?? "General",
     studentEmail: user?.email ?? null,
-    callbacks: childLedCallbacks,
+    hybridScores: adaptiveState.teachingEmotion?.hybridScores ?? null,
+    hybridDominant: adaptiveState.teachingEmotion?.hybridDominant ?? null,
+    cameraEnabled: adaptiveState.cameraEnabled,
+    lastQuestion: lastUserQuestion,
+    lastAnswer: lastAssistantAnswer,
+    messageCount: session?.messages.length ?? 0,
+    scrollContainerRef: scrollRef,
+    answerEndRef,
+    callbacks: comprehensionCallbacks,
   });
 
-  const inputBlocked = childLed.inputBlocked || childLed.delivering;
-  const needsFeedback = childLed.needsFeedback;
-  const isUr = locale === "ur";
+  const inputBlocked =
+    comprehensionFlow.blockInput ||
+    comprehensionFlow.showPopup ||
+    comprehensionFlow.pendingPopup ||
+    comprehensionFlow.imageViewActive ||
+    comprehensionFlow.mcqActive ||
+    comprehensionFlow.showBreathing;
 
   // ── Camera consent flow ───────────────────────────────────────────────────
   const [consentModalOpen, setConsentModalOpen] = useState(false);
 
   useEffect(() => {
+    if (!session?.id) return;
+    if (cameraUserStoppedRef.current || cameraBootstrappedRef.current) return;
     const consent = getCameraConsent();
     if (consent === "granted") {
-      agentStartCamera();
+      cameraBootstrappedRef.current = true;
+      void agentStartCamera();
     } else if (consent === "pending") {
       const timer = setTimeout(() => setConsentModalOpen(true), 1500);
       return () => clearTimeout(timer);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [session?.id]);
+
+  const handleAgentStartCamera = useCallback(async () => {
+    cameraUserStoppedRef.current = false;
+    await agentStartCamera();
+  }, [agentStartCamera]);
+
+  const handleAgentStopCamera = useCallback(() => {
+    cameraUserStoppedRef.current = true;
+    agentStopCamera();
+  }, [agentStopCamera]);
 
   const handleConsentAllow = useCallback(async () => {
     setCameraConsent("granted");
     setConsentModalOpen(false);
+    cameraUserStoppedRef.current = false;
     await agentStartCamera();
   }, [agentStartCamera]);
 
   const handleConsentDecline = useCallback(() => {
     setCameraConsent("denied");
     setConsentModalOpen(false);
-  }, []);
+    cameraUserStoppedRef.current = true;
+    agentStopCamera();
+  }, [agentStopCamera]);
 
   // ── Track user message timestamps for learning signals ────────────────────
   const prevMsgCount = useRef(0);
@@ -510,15 +598,12 @@ function Conversation({ sessionId }: { sessionId: string }) {
     }
   }, [session?.messages]);
 
-  // ── Onboarding redirect if learning preferences not set ───────────────────
-  useEffect(() => {
-    if (!childLed.prefsLoaded || !childLed.needsOnboarding) return;
-    const here =
-      typeof window !== "undefined"
-        ? window.location.pathname + window.location.search
-        : "/chat";
-    router.replace(`/onboarding/learning-style?next=${encodeURIComponent(here)}`);
-  }, [childLed.needsOnboarding, childLed.prefsLoaded, router]);
+  // ── Popup after bot answer (scroll gate — not on every assistant stub) ───
+  const flowOnAssistantAnswerRef = useRef(flowOnAssistantAnswer);
+  flowOnAssistantAnswerRef.current = flowOnAssistantAnswer;
+
+  const handleUnderstoodRef = useRef<(() => void) | null>(null);
+  const handleNotUnderstoodRef = useRef<(() => void) | null>(null);
 
   // Load the session + tutor config in parallel on mount / id change.
   useEffect(() => {
@@ -552,23 +637,24 @@ function Conversation({ sessionId }: { sessionId: string }) {
     };
   }, [sessionId]);
 
-  // Keep the message list scrolled to the bottom.
+  // Keep the message list scrolled to the bottom — except while waiting for read-to-end.
   useEffect(() => {
     if (!scrollRef.current) return;
+    if (comprehensionFlow.pendingPopup && comprehensionFlow.popupGate === "scroll") return;
     scrollRef.current.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
-  }, [session?.messages.length, sending, childLed.pendingFeedbackIndex, childLed.feedbackByIndex]);
+  }, [session?.messages.length, sending, comprehensionFlow.pendingPopup, comprehensionFlow.popupGate]);
 
   const onSend = useCallback(
     async (overrideContent?: string) => {
       const content = (overrideContent ?? draft).trim();
       if (!content || sending || !session) return;
 
-      if (inputBlocked) return;
-      if (needsFeedback && childOnAttemptBlocked()) return;
+      if (inputBlocked || flowOnAttemptBlocked()) {
+        return;
+      }
 
       setSending(true);
       setSendError(null);
-      childOnNewQuestion(content);
 
       // Optimistically push the user bubble so the UI feels instant.
       const optimistic: ChatMessage = {
@@ -583,33 +669,27 @@ function Conversation({ sessionId }: { sessionId: string }) {
       setDraft("");
 
       try {
-        const preferredFormat = childGetPreferredFormat();
+        const preferredFormat = agentGetPreferredFormat();
         const reply = await chatApi.send(sessionId, content, preferredFormat);
-        const isBookAnswer = shouldEnableChildLedFeedback(reply);
-        let assistantIndex = 0;
-        let answerText = "";
+        const isBookAnswer = shouldShowComprehensionPopup(reply);
         setSession((prev) => {
           if (!prev) return prev;
           const next = [...prev.messages];
           if (reply.user_message) next[next.length - 1] = reply.user_message;
           next.push(reply.assistant_message);
-          assistantIndex = next.length - 1;
-          answerText = reply.assistant_message.content ?? "";
-          const updated = {
+          return {
             ...prev,
             messages: next,
             timestamp: reply.session.timestamp ?? prev.timestamp,
           };
-          sessionRef.current = updated;
-          return updated;
         });
-        setSending(false);
-        sendingRef.current = false;
+        // Always reset ladder state on a new Q&A; popup only for textbook content.
+        flowOnStudentQuestion();
         if (isBookAnswer) {
           agentOnStudentNewMessage();
-          await childOnBookAnswer(assistantIndex, content, answerText);
-          if (ttsAutoReadRef.current && childGetFirstModality() !== "voice") {
-            const text = answerText.trim();
+          flowOnAssistantAnswerRef.current();
+          if (ttsAutoReadRef.current) {
+            const text = reply.assistant_message.content?.trim();
             if (text) {
               setTimeout(() => speakForFlowRef.current?.(text), 400);
             }
@@ -625,32 +705,18 @@ function Conversation({ sessionId }: { sessionId: string }) {
         else setSendError(t.auth.errors.generic);
       } finally {
         setSending(false);
-        sendingRef.current = false;
         textareaRef.current?.focus();
       }
     },
-    [
-      draft,
-      sending,
-      session,
-      sessionId,
-      t.auth.errors.generic,
-      childGetPreferredFormat,
-      agentOnStudentNewMessage,
-      childOnNewQuestion,
-      childOnBookAnswer,
-      childOnAttemptBlocked,
-      inputBlocked,
-      needsFeedback,
-      childGetFirstModality,
-    ],
+    [draft, sending, session, sessionId, t.auth.errors.generic, agentGetPreferredFormat, agentOnStudentNewMessage, flowOnStudentQuestion, flowOnAttemptBlocked, inputBlocked],
   );
 
   const onKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    if (inputBlocked) return;
-    if (needsFeedback && e.key === "Enter" && !e.shiftKey) {
-      e.preventDefault();
-      childOnAttemptBlocked();
+    if (inputBlocked) {
+      if (e.key === "Enter" && !e.shiftKey) {
+        e.preventDefault();
+        flowOnAttemptBlocked();
+      }
       return;
     }
     if (e.key === "Enter" && !e.shiftKey) {
@@ -665,17 +731,13 @@ function Conversation({ sessionId }: { sessionId: string }) {
   // (fractions / decimals / algebra) — we just merge whichever payload comes
   // back into the right message. See `chat_engine.generate_visual_aid`.
   const onGenerateImage = useCallback(async (options?: GenerateVisualAidOptions) => {
-    const currentSession = sessionRef.current;
-    const fromFlow = !!options?.attachTo;
-    if (!currentSession || imageBusy) return;
-    if (sending && !fromFlow) return;
+    if (!session || imageBusy || sending) return;
     setImageBusy(true);
     setImageError(null);
     try {
       const result = await chatApi.generateVisualAid(sessionId, options);
       if (options?.stubMessage) {
         const updated = await chatApi.get(sessionId);
-        sessionRef.current = updated;
         setSession(updated);
         return;
       }
@@ -688,16 +750,14 @@ function Conversation({ sessionId }: { sessionId: string }) {
         const next = prev.messages.map((m, i) =>
           i === idx ? mergeVisualAidIntoMessage(m, result) : m,
         );
-        const updated = { ...prev, messages: next };
-        sessionRef.current = updated;
-        return updated;
+        return { ...prev, messages: next };
       });
     } catch (err) {
       setImageError(err instanceof ApiError ? err.detail : t.auth.errors.generic);
     } finally {
       setImageBusy(false);
     }
-  }, [imageBusy, sending, sessionId, t.auth.errors.generic]);
+  }, [session, imageBusy, sending, sessionId, t.auth.errors.generic]);
 
   // ── Chat Quiz ─────────────────────────────────────────────────────────────
   const onOpenChatQuiz = useCallback(async () => {
@@ -799,6 +859,20 @@ function Conversation({ sessionId }: { sessionId: string }) {
   onSpeakRef.current = onSpeak;
   speakForFlowRef.current = speakForFlow;
 
+  // ── Understanding Check handlers ───────────────────────────────────────────
+  const handleUnderstood = useCallback(() => {
+    flowOnPopupYes();
+    agentSubmitFeedback("understood");
+    agentOnUnderstood();
+  }, [flowOnPopupYes, agentSubmitFeedback, agentOnUnderstood]);
+
+  const handleNotUnderstood = useCallback(() => {
+    flowOnPopupNo();
+  }, [flowOnPopupNo]);
+
+  handleUnderstoodRef.current = handleUnderstood;
+  handleNotUnderstoodRef.current = handleNotUnderstood;
+
   // Auto-grow the textarea as the student types (max 5 lines).
   useEffect(() => {
     const ta = textareaRef.current;
@@ -826,19 +900,8 @@ function Conversation({ sessionId }: { sessionId: string }) {
   return (
     <>
     <BreathingModal
-      open={childLed.showBreathing}
-      onComplete={childOnBreathingComplete}
-    />
-    <ModalityPickerModal
-      open={childLed.showModalityPicker}
-      options={childLed.pickerOptions}
-      onSelect={(mod) => void childOnPickModality(mod)}
-      onSkip={() => void childOnSkipQuestion()}
-    />
-    <PostBreathingChoiceModal
-      open={childLed.showPostBreathingChoice}
-      onRetry={() => void childOnRetrySameQuestion()}
-      onNewQuestion={() => void childOnNewQuestionAfterBreak()}
+      open={comprehensionFlow.showBreathing}
+      onComplete={flowOnBreathingComplete}
     />
     <CameraConsentModal
       open={consentModalOpen}
@@ -848,8 +911,9 @@ function Conversation({ sessionId }: { sessionId: string }) {
     <AdaptiveAgentPanel
       state={adaptiveState}
       videoRef={agentVideoRef}
-      onStart={agentStartCamera}
-      onStop={agentStopCamera}
+      setVideoElement={agentSetVideoElement}
+      onStart={handleAgentStartCamera}
+      onStop={handleAgentStopCamera}
     />
     {/* Recap + Quiz modals use fixed positioning (outside overflow-hidden panel) */}
     <AnimatePresence>
@@ -933,8 +997,6 @@ function Conversation({ sessionId }: { sessionId: string }) {
         </div>
       )}
 
-      {needsFeedback && <ChatInstructionBanner />}
-
       {imageError && (
         <div className="px-4 md:px-6 pt-3">
           <div className="flex items-center gap-2 rounded-xl border border-rose-200 bg-rose-50/90 px-3 py-2 text-sm text-rose-700">
@@ -954,29 +1016,52 @@ function Conversation({ sessionId }: { sessionId: string }) {
         ) : (
           <AnimatePresence initial={false}>
             {session.messages.map((m, i) => {
-              let lastAssistantIdx = -1;
-              for (let j = session.messages.length - 1; j >= 0; j--) {
-                if (session.messages[j].role === "assistant") {
-                  lastAssistantIdx = j;
-                  break;
-                }
-              }
-              const showFeedback =
-                m.role === "assistant" &&
-                (childLed.pendingFeedbackIndex === i ||
-                  childLed.feedbackByIndex[i] != null ||
-                  (childLed.needsFeedback && i === lastAssistantIdx));
+              // Only the LAST assistant message is interactive — earlier
+              // ones could still be re-illustrated, but limiting the surface
+              // area keeps the UI calm and avoids accidental cost spikes.
+              const isLastAssistant =
+                m.role === "assistant" && i === session.messages.length - 1;
               return (
                 <div key={`${i}-${m.timestamp}`}>
                   <Bubble message={m} />
-                  {showFeedback && (
-                    <FeedbackBar
-                      feedback={childLed.feedbackByIndex[i] ?? null}
-                      onUp={() => void childOnThumbsUp(i)}
-                      onDown={() => void childOnThumbsDown(i)}
-                      disabled={childLed.delivering || childLed.showModalityPicker}
-                      highlight={childLed.feedbackReminder && childLed.pendingFeedbackIndex === i}
-                      isUr={isUr}
+                  {isLastAssistant &&
+                    comprehensionFlow.pendingPopup &&
+                    comprehensionFlow.popupGate === "scroll" &&
+                    !sending && (
+                    <div
+                      ref={answerEndRef}
+                      className="h-px w-full pointer-events-none"
+                      aria-hidden
+                      data-answer-end
+                    />
+                  )}
+                  {isLastAssistant &&
+                    comprehensionFlow.showPopup &&
+                    !comprehensionFlow.mcqActive &&
+                    !sending && (
+                    <UnderstandingCheck
+                      key={`popup-${comprehensionFlow.adaptationRound}-${comprehensionFlow.popupStartedAt}`}
+                      popupKey={`${comprehensionFlow.adaptationRound}-${comprehensionFlow.popupStartedAt}`}
+                      agentTried={comprehensionFlow.adaptationRound > 0}
+                      typingBlocked={comprehensionFlow.typingBlocked}
+                      promptIndex={comprehensionFlow.popupPromptIndex}
+                      onUnderstood={() => handleUnderstoodRef.current?.()}
+                      onNotUnderstood={() => handleNotUnderstoodRef.current?.()}
+                    />
+                  )}
+                  {isLastAssistant &&
+                    comprehensionFlow.mcqActive &&
+                    comprehensionFlow.mcqQuestions[comprehensionFlow.mcqIndex] && (
+                    <StepMcqPanel
+                      key={`${comprehensionFlow.mcqPhase}-${comprehensionFlow.mcqIndex}`}
+                      question={comprehensionFlow.mcqQuestions[comprehensionFlow.mcqIndex]}
+                      stepNumber={comprehensionFlow.mcqIndex + 1}
+                      totalSteps={comprehensionFlow.mcqQuestions.length}
+                      allowTeachingDefer={
+                        comprehensionFlow.mcqPhase === "recall" &&
+                        comprehensionFlow.mcqIndex === 1
+                      }
+                      onAnswer={(result) => void flowOnMcqAnswered(result)}
                     />
                   )}
                 </div>
@@ -994,49 +1079,40 @@ function Conversation({ sessionId }: { sessionId: string }) {
             <AlertCircle size={14} /> {sendError}
           </div>
         )}
-        {needsFeedback && childLed.feedbackReminder && !sending && (
-          <motion.div
-            initial={{ opacity: 0, y: 4 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="mb-2 text-xs font-semibold text-violet-700 text-center"
-          >
-            {isUr
-              ? "براہ کرم 👍 یا 👎 دبائیں — پھر اگلا سوال پوچھیں"
-              : "Please tap 👍 or 👎 before your next question"}
-          </motion.div>
-        )}
         {inputBlocked && !sending && (
           <div className="mb-2 text-xs font-semibold text-amber-700 text-center">
-            {childLed.showModalityPicker
-              ? isUr
-                ? "اوپر سے ایک طریقہ چنیں"
-                : "Pick an option above"
-              : childLed.showBreathing
-                ? isUr
-                  ? "سانس لیں… پھر جاری رکھیں 🌿"
-                  : "Take a breath… then we'll continue 🌿"
-                : childLed.showPostBreathingChoice
-                  ? isUr
-                    ? "اوپر سے اپنا اگلا قدم چنیں"
-                    : "Choose your next step above"
-                  : childLed.delivering
-                    ? isUr
-                      ? "جواب تیار ہو رہا ہے…"
-                      : "Preparing your answer…"
-                    : null}
+            {comprehensionFlow.mcqActive
+              ? comprehensionFlow.mcqPhase === "appreciation"
+                ? "Fun check time — do your best, no pressure! 🌟"
+                : comprehensionFlow.mcqPhase === "teaching"
+                ? "Step-by-step checks — finish them before typing ✏️"
+                : "Finish the quick checks above before typing ✏️"
+              : comprehensionFlow.imageViewActive
+                ? "🎨 Study the picture for 1 minute — then the check-in will appear"
+              : comprehensionFlow.pendingPopup && comprehensionFlow.popupGate === "scroll"
+                ? "📖 Scroll to the end of the answer — check-in appears after 30 seconds of reading"
+                : comprehensionFlow.showPopup
+                  ? comprehensionFlow.adaptationRound > 0
+                    ? `Help step ${comprehensionFlow.adaptationRound}/5 — please answer the popup 👆`
+                    : "Please answer “Did you get it?” first 👆"
+                  : "Take a breath… then we'll continue 🌿"}
           </div>
         )}
         <div className="flex items-end gap-3">
           <textarea
             ref={textareaRef}
             value={draft}
-            onChange={(e) => setDraft(e.target.value)}
+            onChange={(e) => {
+              if (inputBlocked) {
+                flowOnAttemptBlocked();
+                return;
+              }
+              setDraft(e.target.value);
+            }}
             onKeyDown={onKeyDown}
             placeholder={
-              needsFeedback
-                ? isUr
-                  ? "پہلے 👍 یا 👎 دبائیں…"
-                  : "Tap 👍 or 👎 first…"
+              inputBlocked
+                ? "Answer the popup above first…"
                 : t.pages.chat.placeholder
             }
             rows={1}
@@ -1061,24 +1137,6 @@ function Conversation({ sessionId }: { sessionId: string }) {
 }
 
 // ─── Bubbles ────────────────────────────────────────────────────────────────
-
-/**
- * GPT often writes math using LaTeX-style delimiters like `\( \frac{1}{2} \)`
- * or `\[ a^2 + b^2 = c^2 \]`. ReactMarkdown sees `\(` as an escaped paren and
- * silently drops the backslash, leaving raw LaTeX visible to the student.
- *
- * Normalize those (and bare `$$...$$` / `$...$`) into the `$`-style delimiters
- * `remark-math` parses out of the box, so KaTeX can render them.
- */
-function normalizeMath(input: string): string {
-  if (!input) return input;
-  let s = input;
-  // Display math: \[ ... \]   →   $$ ... $$
-  s = s.replace(/\\\[([\s\S]+?)\\\]/g, (_m, body) => `\n$$${body.trim()}$$\n`);
-  // Inline math: \( ... \)   →   $ ... $
-  s = s.replace(/\\\(([\s\S]+?)\\\)/g, (_m, body) => `$${body.trim()}$`);
-  return s;
-}
 
 function MarkdownContent({ text }: { text: string }) {
   const normalized = normalizeMath(text);
@@ -2810,7 +2868,7 @@ function ChatQuizModal({
         animate={{ opacity: 1, y: 0, scale: 1 }}
         exit={{ opacity: 0, y: 40, scale: 0.96 }}
         transition={{ duration: 0.3, ease: "easeOut" }}
-        className="relative w-full max-w-lg mx-4 rounded-3xl bg-white shadow-2xl overflow-hidden max-h-[90vh] flex flex-col min-h-0"
+        className="relative w-full max-w-lg mx-4 rounded-3xl bg-white shadow-2xl overflow-hidden max-h-[90vh] overflow-y-auto overscroll-y-contain modal-scroll"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Close */}
@@ -2821,7 +2879,7 @@ function ChatQuizModal({
           <X size={16} />
         </button>
 
-        <div className="px-6 py-6 overflow-y-auto overscroll-y-contain modal-scroll flex-1 min-h-0 pb-10">
+        <div className="px-6 py-6">
           {/* Loading */}
           {loading && (
             <div className="flex flex-col items-center py-16 gap-4">

@@ -1241,10 +1241,6 @@ async def send_message(
     reply = reply_result["text"]
     raw_relevant = reply_result.get("is_relevant")
     is_relevant = bool(raw_relevant) if raw_relevant is not None else False
-    query_related = reply_result.get("query_related_to_subject")
-    query_related_to_subject = (
-        bool(query_related) if query_related is not None else True
-    )
 
     # 3. Persist the assistant reply.
     save_message(
@@ -1262,7 +1258,6 @@ async def send_message(
         "user_message": _serialise_session(refreshed)["messages"][-2] if len(msgs) >= 2 else None,
         "assistant_message": _serialise_session(refreshed)["messages"][-1],
         "is_relevant": is_relevant,
-        "query_related_to_subject": query_related_to_subject,
         "session": {
             "id": refreshed["id"],
             "title": refreshed.get("title"),
@@ -2192,65 +2187,3 @@ async def agent_memory(current=Depends(get_current_user)):
     """Return the agent's memory summary for this student (for parent dashboard)."""
     summary = await run_in_thread(get_memory_summary, current["email"])
     return summary
-
-
-# ── Child-led adaptive v2 ─────────────────────────────────────────────────────
-
-class LearningPreferencesSaveRequest(BaseModel):
-    modality_order: list[str]
-
-
-class ChildLedFeedbackRequest(BaseModel):
-    question: str = ""
-    subject: str = "General"
-    modality: str = "text"
-    feedback: str  # "up" | "down"
-    child_selected: bool = False
-    media_signal: Optional[str] = None  # positive | negative | None
-    skipped: bool = False
-    break_after_fail: bool = False
-
-
-@app.get("/api/agent/learning-preferences")
-async def get_learning_prefs(current=Depends(get_current_user)):
-    from utils.child_led_memory import get_learning_preferences
-
-    return await run_in_thread(get_learning_preferences, current["email"])
-
-
-@app.post("/api/agent/learning-preferences")
-async def save_learning_prefs(
-    body: LearningPreferencesSaveRequest,
-    current=Depends(get_current_user),
-):
-    from utils.child_led_memory import save_learning_preferences
-
-    return await run_in_thread(
-        save_learning_preferences,
-        current["email"],
-        body.modality_order,
-    )
-
-
-@app.post("/api/agent/child-led/feedback")
-async def child_led_feedback(
-    body: ChildLedFeedbackRequest,
-    current=Depends(get_current_user),
-):
-    from utils.child_led_memory import record_child_led_feedback
-
-    if body.feedback not in ("up", "down"):
-        raise HTTPException(400, "feedback must be 'up' or 'down'")
-    return await run_in_thread(
-        record_child_led_feedback,
-        current["email"],
-        question=body.question,
-        subject=body.subject,
-        modality=body.modality,
-        feedback=body.feedback,
-        child_selected=body.child_selected,
-        media_signal=body.media_signal,
-        skipped=body.skipped,
-        break_after_fail=body.break_after_fail,
-    )
-

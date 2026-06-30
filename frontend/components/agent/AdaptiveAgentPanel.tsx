@@ -36,6 +36,7 @@ const EMOTION_BAR_CLASS: Record<LabEmotion, string> = {
 interface AdaptiveAgentPanelProps {
   state: AdaptiveTutorState;
   videoRef: React.RefObject<HTMLVideoElement | null>;
+  setVideoElement?: (el: HTMLVideoElement | null) => void;
   onStart: () => void;
   onStop: () => void;
 }
@@ -82,7 +83,7 @@ function headerColor(level: number): string {
 
 // ── Main component ────────────────────────────────────────────────────────────
 
-export function AdaptiveAgentPanel({ state, videoRef, onStart, onStop }: AdaptiveAgentPanelProps) {
+export function AdaptiveAgentPanel({ state, videoRef, setVideoElement, onStart, onStop }: AdaptiveAgentPanelProps) {
   const [collapsed, setCollapsed] = useState(false);
   const [actionMsg, setActionMsg] = useState<string | null>(null);
   const prevDecision = useRef<PolicyResult | null>(null);
@@ -104,6 +105,10 @@ export function AdaptiveAgentPanel({ state, videoRef, onStart, onStop }: Adaptiv
   const { cameraEnabled, cameraError, mediaPipeReady, mediaPipeLoading,
           mediaPipeFps, engagement, generatingContent, escalationLevel } = state;
 
+  const bindVideo = setVideoElement ?? ((el: HTMLVideoElement | null) => {
+    (videoRef as React.MutableRefObject<HTMLVideoElement | null>).current = el;
+  });
+
   return (
     <>
       {/* Friendly action banner (not scary labels) */}
@@ -121,16 +126,16 @@ export function AdaptiveAgentPanel({ state, videoRef, onStart, onStop }: Adaptiv
         )}
       </AnimatePresence>
 
-      {/* Agent panel — fixed right */}
+      {/* Agent panel — fixed right; inner scroll for stats below camera */}
       <motion.div
         initial={{ opacity: 0, x: 60 }}
         animate={{ opacity: 1, x: 0 }}
         transition={{ delay: 0.4, duration: 0.5 }}
-        className="fixed right-4 top-20 z-40 w-64 max-h-[calc(100vh-5rem)] flex flex-col"
+        className="fixed right-4 top-20 z-40 w-64 max-h-[calc(100vh-5rem)] flex flex-col overflow-hidden"
       >
-        {/* Header */}
+        {/* Header — always visible */}
         <div
-          className={`flex items-center justify-between px-3 py-2.5 rounded-2xl text-white shadow-lg cursor-pointer transition-colors duration-500 ${headerColor(escalationLevel)}`}
+          className={`flex-shrink-0 flex items-center justify-between px-3 py-2.5 rounded-2xl text-white shadow-lg cursor-pointer transition-colors duration-500 ${headerColor(escalationLevel)}`}
           onClick={() => setCollapsed((c) => !c)}
         >
           <div className="flex items-center gap-2">
@@ -154,64 +159,90 @@ export function AdaptiveAgentPanel({ state, videoRef, onStart, onStop }: Adaptiv
           {collapsed ? <ChevronDown size={15} /> : <ChevronUp size={15} />}
         </div>
 
-        {/* Collapsible body */}
+        {cameraEnabled && !collapsed && (
+          <div className="flex-shrink-0 mt-2 rounded-2xl bg-white/95 backdrop-blur shadow-lg border border-glacier-100 p-3">
+            <div className="rounded-xl overflow-hidden bg-black aspect-video relative min-h-[120px]">
+              <video
+                ref={bindVideo}
+                autoPlay
+                muted
+                playsInline
+                className="w-full h-full min-h-[120px] object-cover"
+                style={{ transform: "scaleX(-1)" }}
+              />
+              {mediaPipeLoading && (
+                <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/40 text-white gap-2">
+                  <div className="w-5 h-5 rounded-full border-2 border-white border-t-transparent animate-spin" />
+                  <span className="text-[10px]">Loading AI model…</span>
+                </div>
+              )}
+              {mediaPipeReady && mediaPipeFps > 0 && (
+                <div className="absolute top-1 right-1 bg-green-600/90 text-white text-[8px] font-mono px-1.5 py-0.5 rounded-full">
+                  {mediaPipeFps} fps · LIVE
+                </div>
+              )}
+              {!state.videoLive && !mediaPipeLoading && (
+                <div className="absolute inset-0 flex items-center justify-center bg-black/50 text-white text-[10px] px-2 text-center">
+                  Starting camera…
+                </div>
+              )}
+              {state.videoLive && state.frameBlack && (
+                <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/75 text-white text-[10px] px-3 text-center gap-1">
+                  <CameraOff size={16} className="text-amber-300" />
+                  <span className="font-semibold text-amber-200">Preview is black</span>
+                  <span className="text-[9px] text-white/80">Stop camera → Enable again, or check lens cover</span>
+                </div>
+              )}
+              {generatingContent && (
+                <div className="absolute bottom-1 right-1 bg-violet-600/90 text-white text-[8px] px-1.5 py-0.5 rounded-full flex items-center gap-0.5">
+                  <Zap size={8} /> writing…
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Keep stream alive when panel collapsed — off-screen, out of flex layout */}
+        {cameraEnabled && collapsed && (
+          <div
+            className="fixed -left-[9999px] top-0 w-[640px] h-[480px] opacity-0 pointer-events-none overflow-hidden"
+            aria-hidden
+          >
+            <video
+              ref={bindVideo}
+              autoPlay
+              muted
+              playsInline
+              className="w-full h-full object-cover"
+              style={{ transform: "scaleX(-1)" }}
+            />
+          </div>
+        )}
+
+        {/* Collapsible body — scrollable stats below camera */}
         <AnimatePresence initial={false}>
           {!collapsed && (
             <motion.div
               key="body"
-              initial={{ opacity: 0, height: 0 }}
-              animate={{ opacity: 1, height: "auto" }}
-              exit={{ opacity: 0, height: 0 }}
-              className="overflow-hidden min-h-0 flex-1"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.2 }}
+              className="flex-1 min-h-0 overflow-y-auto overscroll-y-contain modal-scroll mt-2"
             >
-              <div className="mt-2 rounded-2xl bg-white/95 backdrop-blur shadow-lg border border-glacier-100 p-3 space-y-3 max-h-[calc(100vh-7.5rem)] overflow-y-auto overscroll-contain">
+              <div className="rounded-2xl bg-white/95 backdrop-blur shadow-lg border border-glacier-100 p-3 space-y-3 pb-4">
 
-                {/* Camera feed */}
-                <div className="rounded-xl overflow-hidden bg-black/10 aspect-video relative">
-                  {cameraEnabled ? (
-                    <>
-                      <video
-                        ref={videoRef as React.RefObject<HTMLVideoElement>}
-                        autoPlay
-                        muted
-                        playsInline
-                        className="w-full h-full min-h-[120px] object-cover scale-x-[-1] bg-black"
-                      />
-                      {mediaPipeLoading && (
-                        <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/40 text-white gap-2">
-                          <div className="w-5 h-5 rounded-full border-2 border-white border-t-transparent animate-spin" />
-                          <span className="text-[10px]">Loading AI model…</span>
-                        </div>
-                      )}
-                      {mediaPipeReady && mediaPipeFps > 0 && (
-                        <div className="absolute top-1 right-1 bg-green-600/90 text-white text-[8px] font-mono px-1.5 py-0.5 rounded-full">
-                          {mediaPipeFps} fps · LIVE
-                        </div>
-                      )}
-                      {cameraEnabled && !state.videoLive && !mediaPipeLoading && (
-                        <div className="absolute inset-0 flex items-center justify-center bg-black/50 text-white text-[10px] px-2 text-center">
-                          Starting camera…
-                        </div>
-                      )}
-                      {generatingContent && (
-                        <div className="absolute bottom-1 right-1 bg-violet-600/90 text-white text-[8px] px-1.5 py-0.5 rounded-full flex items-center gap-0.5">
-                          <Zap size={8} /> writing…
-                        </div>
-                      )}
-                    </>
-                  ) : (
-                    <div className="flex flex-col items-center justify-center h-full py-4 gap-2 text-gray-400">
-                      <CameraOff size={20} />
-                      <span className="text-[10px] text-center px-2">
-                        {cameraError
-                          ? "Camera unavailable"
-                          : "Enable camera for adaptive lessons"}
-                      </span>
-                    </div>
-                  )}
-                </div>
+                {/* Camera off placeholder */}
+                {!cameraEnabled && (
+                  <div className="rounded-xl overflow-hidden bg-black/10 aspect-video relative flex flex-col items-center justify-center py-4 gap-2 text-gray-400">
+                    <CameraOff size={20} />
+                    <span className="text-[10px] text-center px-2">
+                      {cameraError ? "Camera unavailable" : "Enable camera for adaptive lessons"}
+                    </span>
+                  </div>
+                )}
 
-                {/* State machine status */}
+                {/* State machine status — only when camera on */}
                 {cameraEnabled && (
                   <div className="flex items-center gap-2">
                     <span className={`text-[9px] font-bold px-2 py-0.5 rounded-full ${
@@ -303,7 +334,7 @@ export function AdaptiveAgentPanel({ state, videoRef, onStart, onStop }: Adaptiv
                           ? "bg-green-100 text-green-700"
                           : "bg-amber-100 text-amber-700"
                       }`}>
-                        {state.isCalibrated ? "✓ Monitoring active" : "⏳ Calibrating 5s…"}
+                        {state.isCalibrated ? "✓ Calibrated" : "⏳ Calibrating 5s…"}
                       </span>
                     </div>
                     {state.debugReason && (
@@ -327,6 +358,15 @@ export function AdaptiveAgentPanel({ state, videoRef, onStart, onStop }: Adaptiv
                       {state.mediaPipeFps}fps analysis · {state.mediaPipeCamFps}fps camera
                       {state.videoLive ? " · video OK" : " · waiting for video"}
                     </p>
+                    {state.frameBrightness !== null && (
+                      <p className={`text-[9px] ${state.frameBlack ? "text-rose-600 font-semibold" : "text-gray-400"}`}>
+                        Frame brightness: {state.frameBrightness}/255
+                        {state.frameBlack ? " · BLACK ⚠" : " · OK"}
+                      </p>
+                    )}
+                    {state.cameraDeviceLabel && (
+                      <p className="text-[9px] text-gray-400 truncate">Device: {state.cameraDeviceLabel}</p>
+                    )}
                     {state.mediaPipeError && (
                       <p className="text-[9px] text-rose-600">{state.mediaPipeError}</p>
                     )}
@@ -335,7 +375,7 @@ export function AdaptiveAgentPanel({ state, videoRef, onStart, onStop }: Adaptiv
 
                 {/* Camera toggle */}
                 <button
-                  onClick={cameraEnabled ? onStop : onStart}
+                  onClick={() => (cameraEnabled ? onStop() : onStart())}
                   className={`w-full flex items-center justify-center gap-2 rounded-xl py-2 text-xs font-semibold transition-all ${
                     cameraEnabled
                       ? "bg-rose-50 text-rose-600 hover:bg-rose-100 border border-rose-200"

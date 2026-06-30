@@ -6,39 +6,11 @@
  *
  * The base URL can be overridden with NEXT_PUBLIC_API_URL — useful when
  * you deploy the API to a remote host (e.g., a Hugging Face Space).
- *
- * On Vercel (VERCEL=1) we default to the Railway production API so every
- * git push deploy works even if the dashboard env var was never set.
  */
 
-const LOCAL_API = "http://127.0.0.1:8000";
-const PRODUCTION_API = "https://autistudy-app-production.up.railway.app";
-
-/** Strip trailing slashes and fix accidental `https://https://` paste mistakes. */
-function normalizeApiBase(raw: string): string {
-  let url = raw.trim().replace(/\/+$/, "");
-  url = url.replace(/^https:\/\/https:\/\//i, "https://");
-  url = url.replace(/^http:\/\/https:\/\//i, "https://");
-  return url;
-}
-
-function resolveApiBase(): string {
-  if (typeof process !== "undefined" && process.env.NEXT_PUBLIC_API_URL) {
-    return normalizeApiBase(process.env.NEXT_PUBLIC_API_URL);
-  }
-  if (typeof process !== "undefined" && process.env.VERCEL === "1") {
-    return PRODUCTION_API;
-  }
-  if (typeof window !== "undefined") {
-    const host = window.location.hostname;
-    if (host !== "localhost" && host !== "127.0.0.1") {
-      return PRODUCTION_API;
-    }
-  }
-  return LOCAL_API;
-}
-
-export const API_BASE = resolveApiBase();
+export const API_BASE =
+  (typeof process !== "undefined" && process.env.NEXT_PUBLIC_API_URL) ||
+  "http://127.0.0.1:8000";
 
 const TOKEN_KEY = "autistudy_token";
 const PARENT_TOKEN_KEY = "autistudy_parent_token";
@@ -126,27 +98,20 @@ export async function api<T = unknown>(
   }
 
   let res: Response;
-  const url = `${API_BASE}${path}`;
-  const attempt = async (): Promise<Response> =>
-    fetch(url, {
+  try {
+    res = await fetch(`${API_BASE}${path}`, {
       method,
       headers,
       body: body ? JSON.stringify(body) : undefined,
       signal,
     });
-
-  try {
-    res = await attempt();
-  } catch {
-    await new Promise((r) => setTimeout(r, 1500));
-    try {
-      res = await attempt();
-    } catch {
-      throw new ApiError(
-        0,
-        `Cannot reach the AutiStudy server at ${API_BASE}. The backend may be waking up — wait 10 seconds and try again.`,
-      );
-    }
+  } catch (err) {
+    // Network failure (server down, CORS blocked, etc.) — surface a
+    // user-friendly message instead of the cryptic browser default.
+    throw new ApiError(
+      0,
+      "Cannot reach the AutiStudy server. Make sure the API is running on http://127.0.0.1:8000.",
+    );
   }
 
   if (!res.ok) {
@@ -438,7 +403,6 @@ export interface SendMessageResponse {
   user_message: ChatMessage | null;
   assistant_message: ChatMessage;
   is_relevant?: boolean;
-  query_related_to_subject?: boolean;
   session: {
     id: string;
     title: string | null;
@@ -658,21 +622,6 @@ export const chatApi = {
     api<SpeechResponse>("/api/chat/speech", {
       method: "POST",
       body: { text, language },
-    }),
-};
-
-/** Child-led adaptive v2 — learning preferences + thumbs feedback memory */
-export const childLedApi = {
-  getPreferences: () => api<import("@/lib/agent/childLedTypes").LearningPreferences>("/api/agent/learning-preferences"),
-  savePreferences: (modality_order: import("@/lib/agent/childLedTypes").Modality[]) =>
-    api<import("@/lib/agent/childLedTypes").LearningPreferences>("/api/agent/learning-preferences", {
-      method: "POST",
-      body: { modality_order },
-    }),
-  sendFeedback: (body: import("@/lib/agent/childLedTypes").ChildLedFeedbackPayload) =>
-    api<import("@/lib/agent/childLedTypes").LearningPreferences>("/api/agent/child-led/feedback", {
-      method: "POST",
-      body,
     }),
 };
 

@@ -11,7 +11,7 @@ import { DancingButton } from "@/components/primitives/DancingButton";
 import { useLocale } from "@/lib/i18n/LocaleProvider";
 import { useAuth } from "@/lib/auth/AuthProvider";
 import { resolveReturnUrl, clearReturnUrl } from "@/lib/auth/redirect";
-import { ApiError, parentApi, setParentToken, childLedApi } from "@/lib/api/client";
+import { ApiError, parentApi, setParentToken } from "@/lib/api/client";
 
 export default function LoginPage() {
   return (
@@ -60,17 +60,6 @@ function LoginInner() {
       if (role === "child") {
         await login(email, password);
         clearReturnUrl();
-        try {
-          const prefs = await childLedApi.getPreferences();
-          if (!prefs.setup_complete) {
-            router.push(
-              `/onboarding/learning-style?next=${encodeURIComponent(nextUrl)}`,
-            );
-            return;
-          }
-        } catch {
-          /* preferences optional — continue to chat */
-        }
         router.push(nextUrl);
       } else {
         const res = await parentApi.login({ email, password });

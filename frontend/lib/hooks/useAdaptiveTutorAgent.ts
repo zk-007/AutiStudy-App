@@ -92,6 +92,9 @@ export interface AdaptiveTutorState {
   mediaPipeCamFps:   number;   // raw camera RAF fps
   mediaPipeError:    string | null;
   videoLive:         boolean;  // stream attached + frames flowing
+  frameBrightness:   number | null;
+  frameBlack:        boolean;
+  cameraDeviceLabel: string | null;
   engagement:        EngagementProbabilities | null;
   comprehensionState: ComprehensionState;
   lastDecision:      PolicyResult | null;
@@ -132,6 +135,7 @@ export function useAdaptiveTutorAgent({
     cameraEnabled: false, cameraError: null,
     mediaPipeReady: false, mediaPipeLoading: false,
     mediaPipeFps: 0, mediaPipeCamFps: 0, mediaPipeError: null, videoLive: false,
+    frameBrightness: null, frameBlack: false, cameraDeviceLabel: null,
     engagement: null, comprehensionState: "IDLE",
     lastDecision: null, generatingContent: false,
     escalationLevel: 0, actionsHistory: [],
@@ -218,6 +222,7 @@ export function useAdaptiveTutorAgent({
       video.muted = true;
       video.playsInline = true;
       video.setAttribute("playsinline", "true");
+      video.setAttribute("webkit-playsinline", "true");
     }
 
     try {
@@ -226,45 +231,95 @@ export function useAdaptiveTutorAgent({
       return false;
     }
 
-    if (video.readyState < 2) {
-      await new Promise<void>((resolve) => {
-        const done = () => {
-          video.removeEventListener("loadeddata", done);
-          resolve();
-        };
-        video.addEventListener("loadeddata", done, { once: true });
-        setTimeout(resolve, 2500);
-      });
-      try {
-        if (video.paused) await video.play();
-      } catch {
-        return false;
+    // Wait up to 2s for first decoded frame (videoWidth alone is not enough).
+    for (let i = 0; i < 20; i++) {
+      if (video.readyState >= 2 && video.videoWidth > 0 && video.videoHeight > 0) {
+        return true;
       }
+      await new Promise((r) => setTimeout(r, 100));
     }
-
-    return video.readyState >= 2 && video.videoWidth > 0 && video.videoHeight > 0;
+    return video.readyState >= 2 && video.videoWidth > 0;
   }, []);
 
+  // Re-attach whenever the <video> element mounts (panel expand / page load).
+  const setVideoElement = useCallback(
+    (el: HTMLVideoElement | null) => {
+      videoRef.current = el;
+      if (el && streamRef.current) {
+        void attachStreamToVideo().then((ok) => {
+          if (ok) setState((p) => ({ ...p, videoLive: true, cameraError: null }));
+        });
+      }
+    },
+    [attachStreamToVideo],
+  );
+
+  // Keep retrying until stream is bound — panel may mount after getUserMedia.
   useEffect(() => {
     if (!state.cameraEnabled || !streamRef.current) return;
 
     let cancelled = false;
     const retry = async () => {
-      for (let i = 0; i < 60 && !cancelled; i++) {
+      while (!cancelled && streamRef.current) {
         const ok = await attachStreamToVideo();
         if (ok) {
-          setState((p) => ({ ...p, videoLive: true }));
+          setState((p) => ({ ...p, videoLive: true, cameraError: null }));
           return;
         }
-        await new Promise((r) => setTimeout(r, 100));
+        await new Promise((r) => setTimeout(r, 200));
       }
     };
-    retry();
+    void retry();
 
     return () => {
       cancelled = true;
     };
   }, [state.cameraEnabled, attachStreamToVideo]);
+
+  // Real frame brightness — detects black preview even when videoWidth > 0.
+  const brightnessCanvasRef = useRef<HTMLCanvasElement | null>(null);
+  useEffect(() => {
+    if (!state.cameraEnabled) {
+      setState((p) =>
+        p.frameBrightness === null && !p.frameBlack
+          ? p
+          : { ...p, frameBrightness: null, frameBlack: false },
+      );
+      return;
+    }
+    if (!brightnessCanvasRef.current && typeof document !== "undefined") {
+      brightnessCanvasRef.current = document.createElement("canvas");
+    }
+    const sample = () => {
+      const video = videoRef.current;
+      const canvas = brightnessCanvasRef.current;
+      if (!video || !canvas || video.readyState < 2 || video.videoWidth === 0) return;
+      canvas.width = 32;
+      canvas.height = 24;
+      const ctx = canvas.getContext("2d", { willReadFrequently: true });
+      if (!ctx) return;
+      try {
+        ctx.drawImage(video, 0, 0, 32, 24);
+        const { data } = ctx.getImageData(0, 0, 32, 24);
+        let sum = 0;
+        for (let i = 0; i < data.length; i += 4) {
+          sum += 0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2];
+        }
+        const brightness = sum / (data.length / 4);
+        const isBlack = brightness < 8;
+        setState((p) => {
+          const rounded = Math.round(brightness);
+          if (p.frameBrightness === rounded && p.frameBlack === isBlack) return p;
+          return { ...p, frameBrightness: rounded, frameBlack: isBlack };
+        });
+      } catch {
+        /* tainted canvas — ignore */
+      }
+    };
+    const id = setInterval(sample, 1000);
+    sample();
+    return () => clearInterval(id);
+  }, [state.cameraEnabled]);
 
   // ── Evaluation loop (every 2s) ────────────────────────────────────────────
   useEffect(() => {
@@ -321,40 +376,52 @@ export function useAdaptiveTutorAgent({
   const calibrationTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const runAutoCalibration = useCallback(() => {
-    if (calibrationTimerRef.current) clearTimeout(calibrationTimerRef.current);
+    // Wait 5 seconds for the student to settle, then snapshot the buffer
     calibrationTimerRef.current = setTimeout(() => {
       const avg = bufferRef.current.average;
-      if (avg && avg.facePresenceRatio >= 0.5 && studentEmail && !baselineRef.current) {
-        const baseline: StudentBaseline = {
-          browDown:        avg.browDown,
-          browInnerUp:     avg.browInnerUp,
-          smile:           avg.smile,
-          ear:             avg.ear,
-          headYaw:         avg.headYaw,
-          headPitch:       avg.headPitch,
-          normalBlinkRate: Math.max(5, avg.blinkRate),
-          capturedAt:      Date.now(),
-          studentEmail,
-        };
-        baselineRef.current = baseline;
-        try {
-          localStorage.setItem(BASELINE_KEY_PREFIX + studentEmail, JSON.stringify(baseline));
-        } catch {}
-      }
+      if (!avg || avg.facePresenceRatio < 0.5 || !studentEmail) return;
+      // Only save if we don't have a baseline yet
+      if (baselineRef.current) return;
+      const baseline: StudentBaseline = {
+        browDown:        avg.browDown,
+        browInnerUp:     avg.browInnerUp,
+        smile:           avg.smile,
+        ear:             avg.ear,
+        headYaw:         avg.headYaw,
+        headPitch:       avg.headPitch,
+        normalBlinkRate: Math.max(5, avg.blinkRate), // floor at 5 bpm
+        capturedAt:      Date.now(),
+        studentEmail,
+      };
+      baselineRef.current = baseline;
       setState((p) => ({ ...p, isCalibrated: true }));
+      try {
+        localStorage.setItem(BASELINE_KEY_PREFIX + studentEmail, JSON.stringify(baseline));
+      } catch {}
     }, 5000);
   }, [studentEmail]);
 
   // ── Start camera ──────────────────────────────────────────────────────────
   const startCamera = useCallback(async () => {
-    setState((p) => ({ ...p, cameraError: null, videoLive: false }));
+    setState((p) => ({
+      ...p,
+      cameraError: null,
+      videoLive: false,
+      frameBrightness: null,
+      frameBlack: false,
+    }));
     try {
+      streamRef.current?.getTracks().forEach((t) => t.stop());
       const stream = await navigator.mediaDevices.getUserMedia({
-        video: { width: 640, height: 480, facingMode: "user" }, audio: false,
+        video: { width: { ideal: 640 }, height: { ideal: 480 }, facingMode: "user" },
+        audio: false,
       });
       streamRef.current = stream;
-      setState((p) => ({ ...p, cameraEnabled: true }));
-      await attachStreamToVideo();
+      const track = stream.getVideoTracks()[0];
+      const label = track?.label ?? null;
+      setState((p) => ({ ...p, cameraEnabled: true, cameraDeviceLabel: label }));
+      const ok = await attachStreamToVideo();
+      if (ok) setState((p) => ({ ...p, videoLive: true }));
       runAutoCalibration();
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
@@ -468,6 +535,7 @@ export function useAdaptiveTutorAgent({
   return {
     state,
     videoRef,
+    setVideoElement,
     startCamera,
     stopCamera,
     onAnswerGiven,

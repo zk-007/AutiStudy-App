@@ -141,6 +141,7 @@ def _is_adaptation_stub(text: str) -> bool:
     stubs = (
         "let me read this out loud",
         "here's a picture to help",
+        "let me show you another way",
         "did you understand",
         "great job",
         "well done",
@@ -166,6 +167,16 @@ def _substantive_assistant_text(
     return ""
 
 
+def last_assistant_index(history: List[Dict[str, Any]]) -> int:
+    """Index of the most recent assistant message (for adaptation stubs + visuals)."""
+    if not history:
+        return 0
+    for idx in range(len(history) - 1, -1, -1):
+        if history[idx].get("role") == "assistant":
+            return idx
+    return len(history) - 1
+
+
 def substantive_assistant_index(history: List[Dict[str, Any]]) -> int:
     """Index of the tutor's main answer bubble for attaching visual aids."""
     if not history:
@@ -177,10 +188,7 @@ def substantive_assistant_index(history: List[Dict[str, Any]]) -> int:
         content = str(msg.get("content") or "").strip()
         if content and not _is_adaptation_stub(content):
             return idx
-    for idx in range(len(history) - 1, -1, -1):
-        if history[idx].get("role") == "assistant":
-            return idx
-    return len(history) - 1
+    return last_assistant_index(history)
 
 
 def _last_assistant_text(history: List[Dict[str, Any]], chars: int = 400) -> str:

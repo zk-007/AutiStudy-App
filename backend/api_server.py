@@ -294,6 +294,12 @@ class SpeechReq(BaseModel):
     language: str = "en"
 
 
+class VisualAidReq(BaseModel):
+    """Optional body for POST /api/chat/sessions/{id}/image."""
+    attach_to: str = "substantive"  # "substantive" | "last"
+    stub_message: Optional[str] = None
+
+
 # ──────────────────────────────────────────────────────────────────────────────
 # Auth dependency
 # ──────────────────────────────────────────────────────────────────────────────
@@ -1287,7 +1293,11 @@ def _public_image_url(raw: str) -> str:
 
 
 @app.post("/api/chat/sessions/{chat_id}/image")
-async def generate_chat_image(chat_id: str, current=Depends(get_current_user)):
+async def generate_chat_image(
+    chat_id: str,
+    req: VisualAidReq = VisualAidReq(),
+    current=Depends(get_current_user),
+):
     """Generate a visual aid for the most recent user question.
 
     Routes through `chat_engine.generate_visual_aid`, which picks ONE of:
@@ -1319,6 +1329,12 @@ async def generate_chat_image(chat_id: str, current=Depends(get_current_user)):
     if not last_user_msg:
         raise HTTPException(400, "No user question found to illustrate yet.")
 
+    stub = (req.stub_message or "").strip()
+    if stub:
+        save_message(current["email"], chat_id, "assistant", stub)
+        session = get_chat_session(current["email"], chat_id) or session
+        messages = session.get("messages", [])
+
     aid = await run_in_thread(
         tutor_generate_visual_aid,
         user_message=last_user_msg["content"],
@@ -1330,10 +1346,15 @@ async def generate_chat_image(chat_id: str, current=Depends(get_current_user)):
     if not aid:
         raise HTTPException(502, "Visual aid generation failed. Please try again.")
 
-    # Attach visual aid to the substantive tutor answer, not adaptation stubs.
-    from utils.visual_aids import substantive_assistant_index
-    target_index = substantive_assistant_index(messages)
+    from utils.visual_aids import last_assistant_index, substantive_assistant_index
 
+    messages = session.get("messages", [])
+    if (req.attach_to or "substantive").strip().lower() == "last":
+        target_index = last_assistant_index(messages)
+    else:
+        target_index = substantive_assistant_index(messages)
+
+    # Attach visual aid to the chosen assistant bubble, not always the main answer.
     kind = aid.get("kind")
     if kind == "image":
         public_url = _public_image_url(aid.get("image_url", ""))
@@ -2166,3 +2187,65 @@ async def agent_memory(current=Depends(get_current_user)):
     """Return the agent's memory summary for this student (for parent dashboard)."""
     summary = await run_in_thread(get_memory_summary, current["email"])
     return summary
+
+
+# ── Child-led adaptive v2 ─────────────────────────────────────────────────────
+
+class LearningPreferencesSaveRequest(BaseModel):
+    modality_order: list[str]
+
+
+class ChildLedFeedbackRequest(BaseModel):
+    question: str = ""
+    subject: str = "General"
+    modality: str = "text"
+    feedback: str  # "up" | "down"
+    child_selected: bool = False
+    media_signal: Optional[str] = None  # positive | negative | None
+    skipped: bool = False
+    break_after_fail: bool = False
+
+
+@app.get("/api/agent/learning-preferences")
+async def get_learning_prefs(current=Depends(get_current_user)):
+    from utils.child_led_memory import get_learning_preferences
+
+    return await run_in_thread(get_learning_preferences, current["email"])
+
+
+@app.post("/api/agent/learning-preferences")
+async def save_learning_prefs(
+    body: LearningPreferencesSaveRequest,
+    current=Depends(get_current_user),
+):
+    from utils.child_led_memory import save_learning_preferences
+
+    return await run_in_thread(
+        save_learning_preferences,
+        current["email"],
+        body.modality_order,
+    )
+
+
+@app.post("/api/agent/child-led/feedback")
+async def child_led_feedback(
+    body: ChildLedFeedbackRequest,
+    current=Depends(get_current_user),
+):
+    from utils.child_led_memory import record_child_led_feedback
+
+    if body.feedback not in ("up", "down"):
+        raise HTTPException(400, "feedback must be 'up' or 'down'")
+    return await run_in_thread(
+        record_child_led_feedback,
+        current["email"],
+        question=body.question,
+        subject=body.subject,
+        modality=body.modality,
+        feedback=body.feedback,
+        child_selected=body.child_selected,
+        media_signal=body.media_signal,
+        skipped=body.skipped,
+        break_after_fail=body.break_after_fail,
+    )
+

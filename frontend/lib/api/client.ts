@@ -566,6 +566,13 @@ export const quizApi = {
   analytics: () => api<AnalyticsData>("/api/analytics"),
 };
 
+export type VisualAidAttachTo = "substantive" | "last";
+
+export interface GenerateVisualAidOptions {
+  attachTo?: VisualAidAttachTo;
+  stubMessage?: string;
+}
+
 export const chatApi = {
   config: () => api<ChatConfig>("/api/chat/config"),
   list: () => api<ChatSessionSummary[]>("/api/chat/sessions"),
@@ -587,10 +594,13 @@ export const chatApi = {
    * Returns either an `image` (DALL·E illustration) or `math_steps`
    * (KaTeX step card) depending on what the question calls for.
    */
-  generateVisualAid: (id: string) =>
+  generateVisualAid: (id: string, options?: GenerateVisualAidOptions) =>
     api<GenerateVisualAidResponse>(`/api/chat/sessions/${id}/image`, {
       method: "POST",
-      body: {},
+      body: {
+        attach_to: options?.attachTo ?? "substantive",
+        stub_message: options?.stubMessage ?? null,
+      },
     }),
   generateChatQuiz: (id: string) =>
     api<{ questions: QuizQuestion[]; topic_summary: string; grade: number; subject: string }>(
@@ -600,15 +610,33 @@ export const chatApi = {
   getRecap: (id: string) =>
     api<SessionRecapResponse>(`/api/chat/sessions/${id}/recap`),
   // Back-compat alias — older call sites may still use `generateImage`.
-  generateImage: (id: string) =>
+  generateImage: (id: string, options?: GenerateVisualAidOptions) =>
     api<GenerateVisualAidResponse>(`/api/chat/sessions/${id}/image`, {
       method: "POST",
-      body: {},
+      body: {
+        attach_to: options?.attachTo ?? "substantive",
+        stub_message: options?.stubMessage ?? null,
+      },
     }),
   speak: (text: string, language: "en" | "ur" = "en") =>
     api<SpeechResponse>("/api/chat/speech", {
       method: "POST",
       body: { text, language },
+    }),
+};
+
+/** Child-led adaptive v2 — learning preferences + thumbs feedback memory */
+export const childLedApi = {
+  getPreferences: () => api<import("@/lib/agent/childLedTypes").LearningPreferences>("/api/agent/learning-preferences"),
+  savePreferences: (modality_order: import("@/lib/agent/childLedTypes").Modality[]) =>
+    api<import("@/lib/agent/childLedTypes").LearningPreferences>("/api/agent/learning-preferences", {
+      method: "POST",
+      body: { modality_order },
+    }),
+  sendFeedback: (body: import("@/lib/agent/childLedTypes").ChildLedFeedbackPayload) =>
+    api<import("@/lib/agent/childLedTypes").LearningPreferences>("/api/agent/child-led/feedback", {
+      method: "POST",
+      body,
     }),
 };
 

@@ -18,6 +18,7 @@
  */
 
 import { motion, AnimatePresence } from "framer-motion";
+import { useBodyScrollLock } from "@/lib/hooks/useBodyScrollLock";
 
 interface CameraConsentModalProps {
   open: boolean;
@@ -26,6 +27,8 @@ interface CameraConsentModalProps {
 }
 
 export function CameraConsentModal({ open, onAllow, onDecline }: CameraConsentModalProps) {
+  useBodyScrollLock(open);
+
   return (
     <AnimatePresence>
       {open && (

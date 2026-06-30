@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
+import { useBodyScrollLock } from "@/lib/hooks/useBodyScrollLock";
 import {
   X, Palette, Accessibility, Globe, User, Lock, Info,
   ChevronRight, Check, Eye, EyeOff,
@@ -475,6 +476,8 @@ export function SettingsModal() {
   const isUr = locale === "ur";
   const [active, setActive] = useState<Section>("appearance");
 
+  useBodyScrollLock(isOpen);
+
   const Content = SECTION_CONTENT[active];
 
   return (
@@ -520,7 +523,7 @@ export function SettingsModal() {
               </nav>
 
               {/* Content */}
-              <div className="flex-1 overflow-y-auto px-6 py-5 bg-gradient-to-br from-violet-50/30 via-white to-purple-50/30">
+              <div className="flex-1 overflow-y-auto overscroll-y-contain px-6 py-5 bg-gradient-to-br from-violet-50/30 via-white to-purple-50/30">
                 <AnimatePresence mode="wait">
                   <motion.div key={active}
                     initial={{ opacity: 0, x: 10 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -10 }}

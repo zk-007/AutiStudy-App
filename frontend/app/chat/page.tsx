@@ -53,6 +53,7 @@ import { UnderstandingCheck } from "@/components/agent/UnderstandingCheck";
 import { BreathingModal } from "@/components/agent/BreathingModal";
 import { StepMcqPanel } from "@/components/agent/StepMcqPanel";
 import { useComprehensionFlow } from "@/lib/hooks/useComprehensionFlow";
+import { useBodyScrollLock } from "@/lib/hooks/useBodyScrollLock";
 import { shouldShowComprehensionPopup } from "@/lib/agent/comprehensionGate";
 import { playTtsAudio } from "@/lib/audio/playTtsAudio";
 import { loginUrlFor } from "@/lib/auth/redirect";
@@ -530,36 +531,6 @@ function Conversation({ sessionId }: { sessionId: string }) {
     comprehensionFlow.mcqActive ||
     comprehensionFlow.showBreathing;
 
-  // Lock page scroll while popup / MCQ / breathing is open (Problem 6)
-  useEffect(() => {
-    const lock =
-      comprehensionFlow.showPopup ||
-      comprehensionFlow.mcqActive ||
-      comprehensionFlow.showBreathing ||
-      chatQuizOpen;
-    if (!lock) return;
-    const prevBody = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    const scroller = scrollRef.current;
-    const prevScroll = scroller?.style.overflow ?? "";
-    if (scroller) scroller.style.overflow = "hidden";
-    return () => {
-      document.body.style.overflow = prevBody;
-      if (scroller) scroller.style.overflow = prevScroll;
-    };
-  }, [
-    comprehensionFlow.showPopup,
-    comprehensionFlow.mcqActive,
-    comprehensionFlow.showBreathing,
-    chatQuizOpen,
-  ]);
-
-  const showComprehensionPopup =
-    comprehensionFlow.showPopup &&
-    !comprehensionFlow.mcqActive &&
-    !sending &&
-    (session?.messages.some((m) => m.role === "assistant") ?? false);
-
   // ── Camera consent flow ───────────────────────────────────────────────────
   const [consentModalOpen, setConsentModalOpen] = useState(false);
 
@@ -677,7 +648,7 @@ function Conversation({ sessionId }: { sessionId: string }) {
       try {
         const preferredFormat = agentGetPreferredFormat();
         const reply = await chatApi.send(sessionId, content, preferredFormat);
-        const showComprehensionPopup = shouldShowComprehensionPopup(reply);
+        const isBookAnswer = shouldShowComprehensionPopup(reply);
         setSession((prev) => {
           if (!prev) return prev;
           const next = [...prev.messages];
@@ -691,7 +662,7 @@ function Conversation({ sessionId }: { sessionId: string }) {
         });
         // Always reset ladder state on a new Q&A; popup only for textbook content.
         flowOnStudentQuestion();
-        if (showComprehensionPopup) {
+        if (isBookAnswer) {
           agentOnStudentNewMessage();
           flowOnAssistantAnswerRef.current();
           if (ttsAutoReadRef.current) {
@@ -1045,6 +1016,20 @@ function Conversation({ sessionId }: { sessionId: string }) {
                     />
                   )}
                   {isLastAssistant &&
+                    comprehensionFlow.showPopup &&
+                    !comprehensionFlow.mcqActive &&
+                    !sending && (
+                    <UnderstandingCheck
+                      key={`popup-${comprehensionFlow.adaptationRound}-${comprehensionFlow.popupStartedAt}`}
+                      popupKey={`${comprehensionFlow.adaptationRound}-${comprehensionFlow.popupStartedAt}`}
+                      agentTried={comprehensionFlow.adaptationRound > 0}
+                      typingBlocked={comprehensionFlow.typingBlocked}
+                      promptIndex={comprehensionFlow.popupPromptIndex}
+                      onUnderstood={() => handleUnderstoodRef.current?.()}
+                      onNotUnderstood={() => handleNotUnderstoodRef.current?.()}
+                    />
+                  )}
+                  {isLastAssistant &&
                     comprehensionFlow.mcqActive &&
                     comprehensionFlow.mcqQuestions[comprehensionFlow.mcqIndex] && (
                     <StepMcqPanel
@@ -1067,45 +1052,6 @@ function Conversation({ sessionId }: { sessionId: string }) {
         )}
       </div>
 
-      {/* Fixed “Did you get it?” popup — background chat no longer scrolls behind it */}
-      <AnimatePresence>
-        {showComprehensionPopup && (
-          <>
-            <motion.div
-              key="popup-backdrop"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              className="fixed inset-0 z-[55] bg-black/20 backdrop-blur-[1px]"
-              aria-hidden
-            />
-            <motion.div
-              key="popup-panel"
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: 20 }}
-              transition={{ duration: 0.25 }}
-              className="fixed inset-x-0 bottom-[5.5rem] md:bottom-28 z-[60] px-4 md:px-6 pointer-events-none"
-            >
-              <div className="max-w-2xl mx-auto pointer-events-auto shadow-2xl rounded-2xl">
-                <UnderstandingCheck
-                  key={`popup-${comprehensionFlow.adaptationRound}-${comprehensionFlow.popupStartedAt}`}
-                  popupKey={`${comprehensionFlow.adaptationRound}-${comprehensionFlow.popupStartedAt}`}
-                  agentTried={comprehensionFlow.adaptationStepsTaken > 0}
-                  typingBlocked={comprehensionFlow.typingBlocked}
-                  popupDancing={comprehensionFlow.popupDancing}
-                  cvHappyMode={comprehensionFlow.cvHappyMode}
-                  promptIndex={comprehensionFlow.popupPromptIndex}
-                  happyPromptIndex={comprehensionFlow.happyPromptIndex}
-                  onUnderstood={() => handleUnderstoodRef.current?.()}
-                  onNotUnderstood={() => handleNotUnderstoodRef.current?.()}
-                />
-              </div>
-            </motion.div>
-          </>
-        )}
-      </AnimatePresence>
-
       {/* Composer */}
       <div className="border-t border-white/40 px-4 md:px-6 py-4 bg-white/40">
         {sendError && (
@@ -1126,8 +1072,8 @@ function Conversation({ sessionId }: { sessionId: string }) {
               : comprehensionFlow.pendingPopup && comprehensionFlow.popupGate === "scroll"
                 ? "📖 Scroll to the end of the answer — check-in appears after 30 seconds of reading"
                 : comprehensionFlow.showPopup
-                  ? comprehensionFlow.adaptationStepsTaken > 0
-                    ? `Help step ${comprehensionFlow.adaptationStepsTaken}/5 — please answer the popup 👆`
+                  ? comprehensionFlow.adaptationRound > 0
+                    ? `Help step ${comprehensionFlow.adaptationRound}/5 — please answer the popup 👆`
                     : "Please answer “Did you get it?” first 👆"
                   : "Take a breath… then we'll continue 🌿"}
           </div>
@@ -2696,6 +2642,8 @@ function RecapModal({
   onClose: () => void;
   onRefresh: () => void;
 }) {
+  useBodyScrollLock(true);
+
   return (
     <motion.div
       initial={{ opacity: 0 }}
@@ -2712,7 +2660,7 @@ function RecapModal({
         animate={{ opacity: 1, y: 0, scale: 1 }}
         exit={{ opacity: 0, y: 40, scale: 0.96 }}
         transition={{ duration: 0.3, ease: "easeOut" }}
-        className="relative w-full max-w-md rounded-3xl bg-white shadow-2xl overflow-hidden"
+        className="relative w-full max-w-md rounded-3xl bg-white shadow-2xl overflow-hidden max-h-[90vh] flex flex-col"
         onClick={(e) => e.stopPropagation()}
       >
         <button
@@ -2733,7 +2681,7 @@ function RecapModal({
           </h2>
         </div>
 
-        <div className="px-6 py-5">
+        <div className="px-6 py-5 overflow-y-auto overscroll-y-contain flex-1 min-h-0">
           {loading && (
             <div className="flex flex-col items-center gap-3 py-8 text-deep-muted">
               <Loader2 size={28} className="animate-spin text-amber-500" />
@@ -2821,6 +2769,8 @@ function ChatQuizModal({
   onClose: () => void;
   onRetake: () => void;
 }) {
+  useBodyScrollLock(true);
+
   const [qIndex, setQIndex] = React.useState(0);
   const [selected, setSelected] = React.useState<string | null>(null);
   const [revealed, setRevealed] = React.useState(false);
@@ -2910,7 +2860,7 @@ function ChatQuizModal({
         animate={{ opacity: 1, y: 0, scale: 1 }}
         exit={{ opacity: 0, y: 40, scale: 0.96 }}
         transition={{ duration: 0.3, ease: "easeOut" }}
-        className="relative w-full max-w-lg mx-4 rounded-3xl bg-white shadow-2xl overflow-hidden max-h-[90vh] overflow-y-auto"
+        className="relative w-full max-w-lg mx-4 rounded-3xl bg-white shadow-2xl overflow-hidden max-h-[90vh] overflow-y-auto overscroll-y-contain"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Close */}

@@ -6,6 +6,7 @@
 
 import { motion, AnimatePresence } from "framer-motion";
 import { useEffect, useRef, useState } from "react";
+import { useBodyScrollLock } from "@/lib/hooks/useBodyScrollLock";
 
 interface BreathingModalProps {
   open: boolean;
@@ -20,6 +21,8 @@ const EXHALE_MS = 5500;
 const TICK_MS = 1100;
 
 export function BreathingModal({ open, onComplete }: BreathingModalProps) {
+  useBodyScrollLock(open);
+
   const [phase, setPhase] = useState<BreathPhase>("inhale");
   const [count, setCount] = useState(5);
   const onCompleteRef = useRef(onComplete);

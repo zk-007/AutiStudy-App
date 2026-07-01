@@ -345,7 +345,9 @@ function Conversation({ sessionId }: { sessionId: string }) {
   const agentAttemptsRef = useRef(0);  // avoids circular ref: adaptiveState → useMemo → hook
   const lastUserQRef = useRef("");
   const sessionRef = useRef(session);
-  const onGenerateImageRef = useRef<(() => void) | null>(null);
+  const onGenerateImageRef = useRef<
+    ((options?: GenerateVisualAidOptions) => Promise<void>) | null
+  >(null);
   const onSpeakRef = useRef<((index: number, text: string) => Promise<void>) | null>(null);
   const speakForFlowRef = useRef<((text: string) => Promise<void>) | null>(null);
   const imageBusyRef = useRef(false);
@@ -410,8 +412,15 @@ function Conversation({ sessionId }: { sessionId: string }) {
     });
 
     const effects = resolveSideEffects(payload);
-    if (effects.triggerImage && !imageBusyRef.current && !sendingRef.current) {
-      setTimeout(() => onGenerateImageRef.current?.(), 500);
+    if (effects.triggerImage && !imageBusyRef.current) {
+      setTimeout(
+        () =>
+          onGenerateImageRef.current?.({
+            stubMessage: "Let me show you another way! ✨",
+            attachTo: "last",
+          }),
+        500,
+      );
     }
     if (
       effects.triggerVoice &&
@@ -731,13 +740,17 @@ function Conversation({ sessionId }: { sessionId: string }) {
   // (fractions / decimals / algebra) — we just merge whichever payload comes
   // back into the right message. See `chat_engine.generate_visual_aid`.
   const onGenerateImage = useCallback(async (options?: GenerateVisualAidOptions) => {
-    if (!session || imageBusy || sending) return;
+    const currentSession = sessionRef.current;
+    const fromFlow = !!options?.attachTo || !!options?.stubMessage;
+    if (!currentSession || imageBusy) return;
+    if (sending && !fromFlow) return;
     setImageBusy(true);
     setImageError(null);
     try {
       const result = await chatApi.generateVisualAid(sessionId, options);
       if (options?.stubMessage) {
         const updated = await chatApi.get(sessionId);
+        sessionRef.current = updated;
         setSession(updated);
         return;
       }
@@ -750,14 +763,16 @@ function Conversation({ sessionId }: { sessionId: string }) {
         const next = prev.messages.map((m, i) =>
           i === idx ? mergeVisualAidIntoMessage(m, result) : m,
         );
-        return { ...prev, messages: next };
+        const updated = { ...prev, messages: next };
+        sessionRef.current = updated;
+        return updated;
       });
     } catch (err) {
       setImageError(err instanceof ApiError ? err.detail : t.auth.errors.generic);
     } finally {
       setImageBusy(false);
     }
-  }, [session, imageBusy, sending, sessionId, t.auth.errors.generic]);
+  }, [imageBusy, sending, sessionId, t.auth.errors.generic]);
 
   // ── Chat Quiz ─────────────────────────────────────────────────────────────
   const onOpenChatQuiz = useCallback(async () => {

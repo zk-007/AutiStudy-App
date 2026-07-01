@@ -57,7 +57,6 @@ import { useBodyScrollLock, useModalWheelScroll } from "@/lib/hooks/useBodyScrol
 import { shouldShowComprehensionPopup } from "@/lib/agent/comprehensionGate";
 import { mergeVisualAidIntoMessage } from "@/lib/chat/mergeVisualAid";
 import { normalizeMath } from "@/lib/chat/normalizeMath";
-import type { GenerateVisualAidOptions } from "@/lib/api/client";
 import { playTtsAudio } from "@/lib/audio/playTtsAudio";
 import { loginUrlFor } from "@/lib/auth/redirect";
 import { QuizMarkdown } from "@/lib/quiz/QuizMarkdown";
@@ -345,9 +344,8 @@ function Conversation({ sessionId }: { sessionId: string }) {
   const agentAttemptsRef = useRef(0);  // avoids circular ref: adaptiveState → useMemo → hook
   const lastUserQRef = useRef("");
   const sessionRef = useRef(session);
-  const onGenerateImageRef = useRef<
-    ((options?: GenerateVisualAidOptions) => Promise<void>) | null
-  >(null);
+  const onGenerateImageRef = useRef<(() => Promise<void>) | null>(null);
+  const imageFromFlowRef = useRef(false);
   const onSpeakRef = useRef<((index: number, text: string) => Promise<void>) | null>(null);
   const speakForFlowRef = useRef<((text: string) => Promise<void>) | null>(null);
   const imageBusyRef = useRef(false);
@@ -413,14 +411,7 @@ function Conversation({ sessionId }: { sessionId: string }) {
 
     const effects = resolveSideEffects(payload);
     if (effects.triggerImage && !imageBusyRef.current) {
-      setTimeout(
-        () =>
-          onGenerateImageRef.current?.({
-            stubMessage: "Let me show you another way! ✨",
-            attachTo: "last",
-          }),
-        500,
-      );
+      setTimeout(() => onGenerateImageRef.current?.(), 500);
     }
     if (
       effects.triggerVoice &&
@@ -494,8 +485,13 @@ function Conversation({ sessionId }: { sessionId: string }) {
   const comprehensionCallbacks = useMemo(
     () => ({
       onAppendMessage: appendAssistantMessage,
-      onGenerateImage: async (options?: GenerateVisualAidOptions) => {
-        await onGenerateImageRef.current?.(options);
+      onGenerateImage: async () => {
+        imageFromFlowRef.current = true;
+        try {
+          await onGenerateImageRef.current?.();
+        } finally {
+          imageFromFlowRef.current = false;
+        }
       },
       onSpeak: (text: string) =>
         speakForFlowRef.current?.(text) ?? Promise.resolve(),
@@ -739,29 +735,27 @@ function Conversation({ sessionId }: { sessionId: string }) {
   // (countable arithmetic / concept questions) or a KaTeX step card
   // (fractions / decimals / algebra) — we just merge whichever payload comes
   // back into the right message. See `chat_engine.generate_visual_aid`.
-  const onGenerateImage = useCallback(async (options?: GenerateVisualAidOptions) => {
+  const onGenerateImage = useCallback(async () => {
     const currentSession = sessionRef.current;
-    const fromFlow = !!options?.attachTo || !!options?.stubMessage;
     if (!currentSession || imageBusy) return;
-    if (sending && !fromFlow) return;
+    if (sending && !imageFromFlowRef.current) return;
     setImageBusy(true);
     setImageError(null);
     try {
-      const result = await chatApi.generateVisualAid(sessionId, options);
-      if (options?.stubMessage) {
-        const updated = await chatApi.get(sessionId);
-        sessionRef.current = updated;
-        setSession(updated);
-        return;
-      }
+      const result = await chatApi.generateVisualAid(sessionId);
       setSession((prev) => {
         if (!prev) return prev;
-        const idx =
-          result.message_index >= 0 && result.message_index < prev.messages.length
-            ? result.message_index
-            : findTutorAnswerIndex(prev.messages);
+        // Agent/ladder messages exist only in local state — attach visuals to the
+        // latest assistant bubble here, not the backend's message_index.
+        let targetIndex = prev.messages.length - 1;
+        for (let i = prev.messages.length - 1; i >= 0; i--) {
+          if (prev.messages[i].role === "assistant") {
+            targetIndex = i;
+            break;
+          }
+        }
         const next = prev.messages.map((m, i) =>
-          i === idx ? mergeVisualAidIntoMessage(m, result) : m,
+          i === targetIndex ? mergeVisualAidIntoMessage(m, result) : m,
         );
         const updated = { ...prev, messages: next };
         sessionRef.current = updated;

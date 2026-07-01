@@ -68,7 +68,7 @@ export interface ComprehensionFlowCallbacks {
 
   onAppendMessage: (content: string) => void;
 
-  onGenerateImage: (options?: import("@/lib/api/client").GenerateVisualAidOptions) => Promise<void>;
+  onGenerateImage: () => Promise<void>;
 
   onSpeak: (text: string) => Promise<void>;
 
@@ -343,11 +343,9 @@ export function useComprehensionFlow({
         f.activatePopup();
 
       } else if (round === 3) {
+        callbacksRef.current.onAppendMessage("Here's a picture to help! 🎨");
         sync();
-        await callbacksRef.current.onGenerateImage({
-          stubMessage: "Let me show you another way! ✨",
-          attachTo: "last",
-        });
+        await callbacksRef.current.onGenerateImage();
         f.onImageViewStart();
         sync();
         await delay(IMAGE_VIEW_MS);

@@ -489,15 +489,8 @@ def generate_visual_aid(
         symbolic_steps_failed = True
         print("[chat_engine] symbolic steps unavailable — falling back to AI image if allowed")
 
-    # ── Track C: concept diagram (AI image — complex / non-SVG topics only) ──
+    # ── Track C: concept diagram (DALL·E — last resort when SVG tracks miss) ──
     if _llm_module is not None:
-        if (
-            visual_aids is not None
-            and not symbolic_steps_failed
-            and not visual_aids.should_use_ai_concept_image(user_message, subject)
-        ):
-            print("[chat_engine] concept track skipped for maths SVG-eligible question")
-            return None
         try:
             url = _llm_module.generate_image(
                 question=user_message,

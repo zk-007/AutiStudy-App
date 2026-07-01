@@ -352,30 +352,87 @@ def _math_rag_topic_note(language: str) -> str:
     )
 
 
-def _math_full_solution_prompt_addon(language: str) -> str:
+def _math_method_formatting_guide(language: str) -> str:
     if language == "ur":
         return """
+📐 ہر عمل کو کتاب جیسے دکھائیں (صرف جملے میں نہ لکھیں):
+
+**تقسیم (Division):**
+- Dividend ≥100: لمبی تقسیم — quotient اوپر، divisor ) dividend، ہر loop: تقسیم → ضرب → تفریق → نیچے لائیں
+- Dividend 21–99: مختصر تقسیم — digit بہ digit
+- مثال لمبی تقسیم (156 ÷ 12):
+```
+      13        ← quotient
+  12 ) 156
+      -12       ← 12 × 1
+      ----
+       36
+      -36       ← 12 × 3
+      ----
+        0
+```
+- ہر loop کے لیے لکھیں: "12 میں 15؟ → 1", "1×12=12", "15−12=3", "6 نیچے لائیں → 36"
+
+**ضرب (Multiplication):** کالم طریقہ — partial products الگ سطر، پھر جمع
+**جمع/تفریق:** کolumn — units, tens, carry/borrow دکھائیں
+**فریکشن:** common denominator، پھر numerator؛ ہر قدم LaTeX: $\\frac{a}{b}$
+
+ہر Step میں: (1) کیا کر رہے ہیں (2) aligned working (3) نتیجہ
+"""
+    return """
+📐 Show every operation the way a textbook/workbook would (not only in prose):
+
+**DIVISION:**
+- Dividend ≥100: LONG DIVISION — quotient on top, divisor ) dividend, each cycle: divide → multiply → subtract → bring down
+- Dividend 21–99: SHORT DIVISION — one digit at a time
+- Long division example (156 ÷ 12):
+```
+      13        ← quotient
+  12 ) 156
+      -12       ← 12 × 1
+      ----
+       36
+      -36       ← 12 × 3
+      ----
+        0
+```
+- Label each cycle: "How many 12s in 15? → 1", "1 × 12 = 12", "15 − 12 = 3", "Bring down 6 → 36"
+
+**MULTIPLICATION:** Column method — show partial products on separate lines, then add
+**ADDITION / SUBTRACTION:** Column layout — align units/tens; show carry or borrow on each step
+**FRACTIONS:** Show common denominator step, then numerators; use LaTeX $\\frac{a}{b}$ on their own lines
+
+Each Step must include: (1) what you are doing (2) the aligned working (code block or LaTeX) (3) the result of that step
+"""
+
+
+def _math_full_solution_prompt_addon(language: str) -> str:
+    formatting = _math_method_formatting_guide(language)
+    if language == "ur":
+        return f"""
 
 ⚠️ اس سوال کے لیے مکمل اور درست حل ضروری ہے:
 - اوپر والے "مختصر جواب" اور "مزید بتائیں" کے اصول نظرانداز کریں۔
 - طالب علم کے اصل اعداد/سوال استعمال کریں — حوالہ مواد سے جواب نہ نکالیں۔
 - پورا سوال شروع سے آخر تک حل کریں — کوئی قدم یا حصہ چھوڑیں نہیں، چاہے جواب لمبا ہو۔
 - ہر قدم نمبر دیں (قدم 1، قدم 2، ...)۔
-- درست جماعت-سطح کا طریقہ استعمال کریں (کالم، لمبی تقسیم، وغیرہ)۔
+- درست جماعت-سطح کا طریقہ استعمال کریں — تقسیم کو لمبی/مختصر تقسیم کی شکل میں دکھائیں، ضرب/جمع کو کالم میں۔
 - ہر حساب دوبارہ چیک کریں؛ آخر میں واضح حتمی جواب لکھیں۔
 - اگر کثیر حصوں والا سوال ہے تو ہر حصہ مکمل کریں۔
+{formatting}
 """
-    return """
+    return f"""
 
 ⚠️ COMPLETE AND CORRECT SOLUTION REQUIRED for this math problem:
 - IGNORE the "short first answer" and "tell me more" rules above.
 - Use the student's EXACT numbers and wording — never substitute from reference excerpts.
 - Solve the ENTIRE problem in this one reply — every step, every sub-part, no matter how long.
 - Number each step clearly (Step 1, Step 2, ...).
-- Use the correct grade-level method (column method, long division, etc.).
+- Use the correct grade-level method AND show the working layout (long/short division bracket, multiplication columns, etc.).
 - Verify every arithmetic step; if unsure, recalculate before writing the step.
 - End with a clear final answer line (e.g. "Answer: ...").
 - For multi-part or word problems, finish ALL parts — never stop halfway or defer steps.
+{formatting}
 """
 
 

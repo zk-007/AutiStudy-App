@@ -26,23 +26,40 @@ function normalizeApiBase(raw: string): string {
   return url;
 }
 
-function resolveApiBase(): string {
-  if (typeof process !== "undefined" && process.env.NEXT_PUBLIC_API_URL) {
-    return normalizeApiBase(process.env.NEXT_PUBLIC_API_URL);
+function isLocalDevHost(): boolean {
+  if (typeof window === "undefined") return false;
+  const host = window.location.hostname;
+  return host === "localhost" || host === "127.0.0.1";
+}
+
+/** Resolve API base at call time so production never sticks to localhost. */
+export function getApiBase(): string {
+  const envUrl =
+    typeof process !== "undefined"
+      ? (process.env.NEXT_PUBLIC_API_URL ?? "").trim()
+      : "";
+
+  if (typeof window !== "undefined" && !isLocalDevHost()) {
+    if (
+      envUrl &&
+      !envUrl.includes("127.0.0.1") &&
+      !envUrl.includes("localhost")
+    ) {
+      return normalizeApiBase(envUrl);
+    }
+    return PRODUCTION_API;
   }
+
+  if (envUrl) return normalizeApiBase(envUrl);
+
   if (typeof process !== "undefined" && process.env.VERCEL === "1") {
     return PRODUCTION_API;
   }
-  if (typeof window !== "undefined") {
-    const host = window.location.hostname;
-    if (host !== "localhost" && host !== "127.0.0.1") {
-      return PRODUCTION_API;
-    }
-  }
+
   return LOCAL_API;
 }
 
-export const API_BASE = resolveApiBase();
+export const API_BASE = getApiBase();
 
 const TOKEN_KEY = "autistudy_token";
 const PARENT_TOKEN_KEY = "autistudy_parent_token";
@@ -114,11 +131,22 @@ interface ApiOptions {
   body?: unknown;
   auth?: boolean;
   signal?: AbortSignal;
+  /** Extra retries after a network failure (default 1 = two attempts total). */
+  retries?: number;
+  /** Delay between retries in ms. */
+  retryDelayMs?: number;
 }
 
 export async function api<T = unknown>(
   path: string,
-  { method = "GET", body, auth = true, signal }: ApiOptions = {},
+  {
+    method = "GET",
+    body,
+    auth = true,
+    signal,
+    retries = 1,
+    retryDelayMs = 1500,
+  }: ApiOptions = {},
 ): Promise<T> {
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
@@ -129,20 +157,35 @@ export async function api<T = unknown>(
     if (token) headers.Authorization = `Bearer ${token}`;
   }
 
-  let res: Response;
-  try {
-    res = await fetch(`${API_BASE}${path}`, {
+  const url = `${getApiBase()}${path}`;
+  const attempt = async (): Promise<Response> =>
+    fetch(url, {
       method,
       headers,
       body: body ? JSON.stringify(body) : undefined,
       signal,
     });
-  } catch (err) {
-    // Network failure (server down, CORS blocked, etc.) — surface a
-    // user-friendly message instead of the cryptic browser default.
+
+  let res: Response | undefined;
+  let lastErr: unknown;
+  for (let i = 0; i <= retries; i++) {
+    try {
+      res = await attempt();
+      lastErr = undefined;
+      break;
+    } catch (err) {
+      lastErr = err;
+      if (i < retries) {
+        await new Promise((r) => setTimeout(r, retryDelayMs));
+        continue;
+      }
+    }
+  }
+
+  if (lastErr !== undefined || !res) {
     throw new ApiError(
       0,
-      "Cannot reach the AutiStudy server. Make sure the API is running on http://127.0.0.1:8000.",
+      `Cannot reach the AutiStudy server at ${getApiBase()}. The backend may be waking up — wait a few seconds and try again.`,
     );
   }
 
@@ -165,6 +208,22 @@ export async function api<T = unknown>(
   if (res.status === 204) return undefined as T;
   const text = await res.text();
   return text ? (JSON.parse(text) as T) : (undefined as T);
+}
+
+/** Image / TTS can take 30–90s — longer timeout + extra retries. */
+async function apiMedia<T>(path: string, opts: ApiOptions = {}): Promise<T> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 180_000);
+  try {
+    return await api<T>(path, {
+      ...opts,
+      signal: controller.signal,
+      retries: 3,
+      retryDelayMs: 2000,
+    });
+  } finally {
+    clearTimeout(timeout);
+  }
 }
 
 
@@ -495,7 +554,7 @@ export function resolveImageUrl(raw: string): string {
   if (raw.startsWith("http://") || raw.startsWith("https://") || raw.startsWith("data:")) {
     return raw;
   }
-  return `${API_BASE}${raw.startsWith("/") ? raw : `/${raw}`}`;
+  return `${getApiBase()}${raw.startsWith("/") ? raw : `/${raw}`}`;
 }
 
 // ── Quiz + Analytics types ────────────────────────────────────────────────────
@@ -627,7 +686,7 @@ export const chatApi = {
    * (KaTeX step card) depending on what the question calls for.
    */
   generateVisualAid: (id: string, options?: GenerateVisualAidOptions) =>
-    api<GenerateVisualAidResponse>(`/api/chat/sessions/${id}/image`, {
+    apiMedia<GenerateVisualAidResponse>(`/api/chat/sessions/${id}/image`, {
       method: "POST",
       body: {
         attach_to: options?.attachTo ?? "substantive",
@@ -643,7 +702,7 @@ export const chatApi = {
     api<SessionRecapResponse>(`/api/chat/sessions/${id}/recap`),
   // Back-compat alias — older call sites may still use `generateImage`.
   generateImage: (id: string, options?: GenerateVisualAidOptions) =>
-    api<GenerateVisualAidResponse>(`/api/chat/sessions/${id}/image`, {
+    apiMedia<GenerateVisualAidResponse>(`/api/chat/sessions/${id}/image`, {
       method: "POST",
       body: {
         attach_to: options?.attachTo ?? "substantive",
@@ -651,7 +710,7 @@ export const chatApi = {
       },
     }),
   speak: (text: string, language: "en" | "ur" = "en") =>
-    api<SpeechResponse>("/api/chat/speech", {
+    apiMedia<SpeechResponse>("/api/chat/speech", {
       method: "POST",
       body: { text, language },
     }),
@@ -684,7 +743,7 @@ async function apiParent<T = unknown>(
 
   let res: Response;
   try {
-    res = await fetch(`${API_BASE}${path}`, {
+    res = await fetch(`${getApiBase()}${path}`, {
       method,
       headers,
       body: body ? JSON.stringify(body) : undefined,

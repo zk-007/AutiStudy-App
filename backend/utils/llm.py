@@ -320,40 +320,62 @@ def _needs_full_math_solution(question: str, subject: str) -> bool:
             q,
         )
         and not re.search(r"\d", q)
+        and not re.search(r"\d+\s*/\s*\d+", q)
         and not any(t in q for t in _MATH_PROBLEM_TRIGGERS)
     ):
         return False
 
     if re.search(r"\d", q):
         return True
+    if re.search(r"\d+\s*/\s*\d+", q):
+        return True
     if re.search(r"\d+\s*[-+x×*/÷]\s*\d+", q):
         return True
     if any(t in q for t in _MATH_PROBLEM_TRIGGERS):
         return True
-    return len(q.split()) >= 8
+    return len(q.split()) >= 6
+
+
+def _math_rag_topic_note(language: str) -> str:
+    if language == "ur":
+        return (
+            "\n\n(نوٹ: نیچے کا حوالہ مواد صرف اس بات کی تصدیق کے لیے ہے کہ اس "
+            "قسم کے سوالات جماعت کی کتاب میں آتے ہیں — اعداد یا جواب وہاں سے "
+            "مختلف ہو سکتے ہیں۔ حوالے کا جواب نہ نکالیں؛ طالب علم کے اصل سوال "
+            "کو خود درست طریقے سے مکمل حل کریں۔)"
+        )
+    return (
+        "\n\n(NOTE: The excerpts below only confirm that this TYPE of question "
+        "is covered in the grade textbook — they may use different numbers or "
+        "wording. Do NOT copy answers from the excerpts. Solve the student's "
+        "exact question yourself with verified arithmetic.)"
+    )
 
 
 def _math_full_solution_prompt_addon(language: str) -> str:
     if language == "ur":
         return """
 
-⚠️ اس سوال کے لیے مکمل حل ضروری ہے:
+⚠️ اس سوال کے لیے مکمل اور درست حل ضروری ہے:
 - اوپر والے "مختصر جواب" اور "مزید بتائیں" کے اصول نظرانداز کریں۔
-- پورا سوال شروع سے آخر تک حل کریں — کوئی قدم چھوڑیں نہیں۔
+- طالب علم کے اصل اعداد/سوال استعمال کریں — حوالہ مواد سے جواب نہ نکالیں۔
+- پورا سوال شروع سے آخر تک حل کریں — کوئی قدم یا حصہ چھوڑیں نہیں، چاہے جواب لمبا ہو۔
 - ہر قدم نمبر دیں (قدم 1، قدم 2، ...)۔
 - درست جماعت-سطح کا طریقہ استعمال کریں (کالم، لمبی تقسیم، وغیرہ)۔
-- آخر میں واضح جواب لکھیں۔
-- لمبے یا کثیر حصوں والے سوالات کے تمام حصے مکمل کریں۔
+- ہر حساب دوبارہ چیک کریں؛ آخر میں واضح حتمی جواب لکھیں۔
+- اگر کثیر حصوں والا سوال ہے تو ہر حصہ مکمل کریں۔
 """
     return """
 
-⚠️ COMPLETE SOLUTION REQUIRED for this math problem:
+⚠️ COMPLETE AND CORRECT SOLUTION REQUIRED for this math problem:
 - IGNORE the "short first answer" and "tell me more" rules above.
-- Solve the ENTIRE problem in this one reply — every step from start to final answer.
+- Use the student's EXACT numbers and wording — never substitute from reference excerpts.
+- Solve the ENTIRE problem in this one reply — every step, every sub-part, no matter how long.
 - Number each step clearly (Step 1, Step 2, ...).
 - Use the correct grade-level method (column method, long division, etc.).
+- Verify every arithmetic step; if unsure, recalculate before writing the step.
 - End with a clear final answer line (e.g. "Answer: ...").
-- For long or multi-part problems, finish ALL parts — never stop halfway or defer steps.
+- For multi-part or word problems, finish ALL parts — never stop halfway or defer steps.
 """
 
 
@@ -434,7 +456,7 @@ def generate_response(
             is_from_textbook = False
 
     wants_full_math = _needs_full_math_solution(user_message, subject)
-    if wants_full_math and query_related_to_subject:
+    if wants_full_math and _is_math_subject(subject):
         is_from_textbook = True
 
     # Get language-specific system prompt.
@@ -454,10 +476,11 @@ def generate_response(
 
     # Add context or not-in-textbook instruction
     if context and is_from_textbook:
+        topic_note = _math_rag_topic_note(language) if wants_full_math else ""
         if language == "ur":
-            system_prompt += f"\n\nمتعلقہ تعلیمی مواد:\n{context}"
+            system_prompt += f"\n\nمتعلقہ تعلیمی مواد:\n{context}{topic_note}"
         else:
-            system_prompt += f"\n\nRelevant learning material:\n{context}"
+            system_prompt += f"\n\nRelevant learning material:\n{context}{topic_note}"
     elif not is_from_textbook:
         system_prompt = _build_off_topic_system_prompt(
             grade, subject, language, query_related_to_subject
@@ -467,7 +490,7 @@ def generate_response(
     if extra_system_hint and is_from_textbook:
         system_prompt += extra_system_hint
 
-    if wants_full_math and query_related_to_subject:
+    if wants_full_math and is_from_textbook:
         system_prompt += _math_full_solution_prompt_addon(language)
 
     messages = [{"role": "system", "content": system_prompt}]
@@ -480,19 +503,22 @@ def generate_response(
 
     messages.append({"role": "user", "content": user_message})
 
-    if wants_full_math and query_related_to_subject:
-        max_tokens = 1800
-        temperature = 0.5
+    if wants_full_math and is_from_textbook:
+        max_tokens = 4096
+        temperature = 0.2
+        model = os.getenv("MATH_SOLVE_MODEL", "gpt-4o")
     elif is_from_textbook:
         max_tokens = 600
         temperature = 0.7
+        model = "gpt-4o-mini"
     else:
         max_tokens = 350
         temperature = 0.7
+        model = "gpt-4o-mini"
 
     try:
         response = client.chat.completions.create(
-            model="gpt-4o-mini",
+            model=model,
             messages=messages,
             temperature=temperature,
             max_tokens=max_tokens,

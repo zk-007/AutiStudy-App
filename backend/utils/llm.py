@@ -406,6 +406,120 @@ Each Step must include: (1) what you are doing (2) the aligned working (code blo
 """
 
 
+def _bodmas_rules(language: str) -> str:
+    if language == "ur":
+        return """
+🔢 BODMAS / BIDMAS (کتاب اور ChatGPT جیسا — PEMDAS بھی یہی ہے):
+1. Brackets ( ) — اندر سے باہر
+2. Orders — powers / indices ($2^3$)
+3. Division اور Multiplication — بائیں سے دائیں، برابر ترجیح
+4. Addition اور Subtraction — بائیں سے دائیں، برابر ترجیح
+⚠️ Division اور Multiplication دونوں برابر ہیں — پہلے جو بائیں آئے وہ پہلے۔
+"""
+    return """
+🔢 BODMAS / BIDMAS (same as the textbook and ChatGPT — PEMDAS is the same idea):
+1. Brackets ( ) — innermost first
+2. Orders — powers / exponents / indices (e.g. $2^3$)
+3. Division and Multiplication — left to right, EQUAL priority
+4. Addition and Subtraction — left to right, EQUAL priority
+⚠️ Do NOT do all multiplication before division — go left to right.
+"""
+
+
+def _build_dedicated_math_solve_prompt(
+    grade: int,
+    subject: str,
+    language: str,
+    context: str,
+    extra_system_hint: str,
+) -> str:
+    """Standalone prompt for worked solutions — no short-answer / emoji rules."""
+    formatting = _math_method_formatting_guide(language)
+    bodmas = _bodmas_rules(language)
+    topic_note = _math_rag_topic_note(language) if context else ""
+
+    if language == "ur":
+        base = f"""آپ پاکستان جماعت 4-7 کے ماہر ریاضی ٹیوٹر ہیں۔
+
+سب سے اہم: ہر حساب درست ہونا چاہیے — خوبصورت قدموں کے ساتھ غلط جواب ناقابل قبول ہے۔
+
+{bodmas}
+
+اصول:
+- طالب علم کے اصل اعداد استعمال کریں؛ حوالہ مواد سے جواب نہ نکالیں۔
+- ہر سطر لکھنے سے پہلے وہ حساب کریں؛ اگلی سطر میں وہی عدد لکھیں جو واقعی نکلا۔
+- پورا حل ایک جواب میں — ہر قدم نمبر دیں (قدم 1، قدم 2، ...)۔
+- آخر میں "جواب: ..." لکھیں۔
+- جماعت: {grade}۔ مضمون: {subject}۔
+{formatting}
+"""
+    else:
+        base = f"""You are an expert math tutor for Pakistan grades 4-7.
+
+TOP PRIORITY: Every calculation must be CORRECT — beautiful steps with a wrong final answer are unacceptable.
+
+{bodmas}
+
+Rules:
+- Use the student's EXACT numbers; never copy answers from reference excerpts.
+- BEFORE writing each line, compute that step; the number you write must be the actual result.
+- Full solution in one reply — number every step (Step 1, Step 2, ...).
+- End with "Answer: ..." on its own line.
+- Grade: {grade}. Subject: {subject}.
+{formatting}
+"""
+    if context:
+        label = "متعلقہ تعلیمی مواد:" if language == "ur" else "Relevant learning material:"
+        base += f"\n\n{label}\n{context}{topic_note}"
+    if extra_system_hint:
+        base += extra_system_hint
+    return base
+
+
+def _verify_math_solution(
+    client: "OpenAI",
+    question: str,
+    draft: str,
+    grade: int,
+    language: str,
+) -> str:
+    """Second pass: proofread every arithmetic line and fix errors."""
+    model = os.getenv("MATH_SOLVE_MODEL", "gpt-4o")
+    if language == "ur":
+        system = (
+            "آپ جماعت 4-7 کے ریاضی پروف ریڈر ہیں۔ BODMAS/BIDMAS استعمال کریں۔ "
+            "مسودے میں ہر حسابی سطر اور حتمی جواب چیک کریں۔ "
+            "اگر کوئی غلطی ہے تو پورا درست حل (تمام قدموں سمیت) لکھیں۔ "
+            "اگر سب درست ہے تو مسودہ بالکل ویسے ہی واپس کریں۔"
+        )
+        user = f"جماعت {grade} سوال:\n{question}\n\nچیک کرنے کے لیے مسودہ:\n{draft}"
+    else:
+        system = (
+            "You are a meticulous math proofreader for grades 4-7. Use BODMAS/BIDMAS. "
+            "Check EVERY arithmetic line and the final answer in the draft solution. "
+            "If ANY calculation or the final answer is wrong, output the FULL corrected "
+            "solution with all steps and proper working. "
+            "If everything is correct, return the draft EXACTLY unchanged."
+        )
+        user = f"Grade {grade} problem:\n{question}\n\nDraft to verify:\n{draft}"
+
+    try:
+        resp = client.chat.completions.create(
+            model=model,
+            messages=[
+                {"role": "system", "content": system},
+                {"role": "user", "content": user},
+            ],
+            temperature=0.0,
+            max_tokens=4096,
+        )
+        fixed = (resp.choices[0].message.content or "").strip()
+        return fixed if fixed else draft
+    except Exception as err:
+        print(f"[llm] math verify pass failed: {err}")
+        return draft
+
+
 def _math_full_solution_prompt_addon(language: str) -> str:
     formatting = _math_method_formatting_guide(language)
     if language == "ur":
@@ -516,39 +630,42 @@ def generate_response(
     if wants_full_math and _is_math_subject(subject):
         is_from_textbook = True
 
-    # Get language-specific system prompt.
-    #
-    # We use plain str.replace() rather than str.format() because the prompt
-    # body contains LaTeX examples like "$\frac{1}{2}$" and "$3 \times 4$".
-    # str.format() interprets every "{…}" as a placeholder and would crash
-    # with `Replacement index 1 out of range for positional args tuple` on
-    # the "{1}" inside "\frac{1}{2}". When that crash fires we lose the RAG
-    # answer entirely and the engine has to fall back to a second OpenAI
-    # call, doubling the user's wait. Plain replace is brace-safe.
-    system_prompt = (
-        get_system_prompt(language)
-        .replace("{grade}", str(grade))
-        .replace("{subject}", str(subject))
-    )
+    use_dedicated_math = wants_full_math and is_from_textbook
 
-    # Add context or not-in-textbook instruction
-    if context and is_from_textbook:
-        topic_note = _math_rag_topic_note(language) if wants_full_math else ""
-        if language == "ur":
-            system_prompt += f"\n\nمتعلقہ تعلیمی مواد:\n{context}{topic_note}"
-        else:
-            system_prompt += f"\n\nRelevant learning material:\n{context}{topic_note}"
-    elif not is_from_textbook:
-        system_prompt = _build_off_topic_system_prompt(
-            grade, subject, language, query_related_to_subject
+    if use_dedicated_math:
+        system_prompt = _build_dedicated_math_solve_prompt(
+            grade, subject, language, context if context else "", extra_system_hint,
+        )
+    else:
+        # Get language-specific system prompt.
+        #
+        # We use plain str.replace() rather than str.format() because the prompt
+        # body contains LaTeX examples like "$\frac{1}{2}$" and "$3 \times 4$".
+        # str.format() interprets every "{…}" as a placeholder and would crash
+        # with `Replacement index 1 out of range for positional args tuple` on
+        # the "{1}" inside "\frac{1}{2}". When that crash fires we lose the RAG
+        # answer entirely and the engine has to fall back to a second OpenAI
+        # call, doubling the user's wait. Plain replace is brace-safe.
+        system_prompt = (
+            get_system_prompt(language)
+            .replace("{grade}", str(grade))
+            .replace("{subject}", str(subject))
         )
 
-    # Tutoring-agent format hints only apply to on-textbook questions.
-    if extra_system_hint and is_from_textbook:
-        system_prompt += extra_system_hint
+        # Add context or not-in-textbook instruction
+        if context and is_from_textbook:
+            if language == "ur":
+                system_prompt += f"\n\nمتعلقہ تعلیمی مواد:\n{context}"
+            else:
+                system_prompt += f"\n\nRelevant learning material:\n{context}"
+        elif not is_from_textbook:
+            system_prompt = _build_off_topic_system_prompt(
+                grade, subject, language, query_related_to_subject
+            )
 
-    if wants_full_math and is_from_textbook:
-        system_prompt += _math_full_solution_prompt_addon(language)
+        # Tutoring-agent format hints only apply to on-textbook questions.
+        if extra_system_hint and is_from_textbook:
+            system_prompt += extra_system_hint
 
     messages = [{"role": "system", "content": system_prompt}]
 
@@ -560,9 +677,9 @@ def generate_response(
 
     messages.append({"role": "user", "content": user_message})
 
-    if wants_full_math and is_from_textbook:
+    if use_dedicated_math:
         max_tokens = 4096
-        temperature = 0.2
+        temperature = 0.0
         model = os.getenv("MATH_SOLVE_MODEL", "gpt-4o")
     elif is_from_textbook:
         max_tokens = 600
@@ -581,6 +698,10 @@ def generate_response(
             max_tokens=max_tokens,
         )
         text = response.choices[0].message.content
+        if use_dedicated_math and text:
+            text = _verify_math_solution(
+                client, user_message, text.strip(), grade, language,
+            )
         return _wrap(
             text,
             is_relevant=is_from_textbook,

@@ -289,6 +289,11 @@ def _has_times_table_signal(text: str) -> bool:
     return any(kw in lower for kw in _TIMES_TABLE_KW) or bool(_TIMES_TABLE_RX.search(text))
 
 
+def _has_geometry_signal(text: str) -> bool:
+    lower = text.lower()
+    return any(kw in lower for kw in _GEOMETRY_KW)
+
+
 def _detect_geometry_focus(text: str) -> str:
     """What to emphasise in the diagram: perimeter, area, both, or neutral shape."""
     lower = (text or "").lower()

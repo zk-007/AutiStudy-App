@@ -1335,14 +1335,19 @@ async def generate_chat_image(
         session = get_chat_session(current["email"], chat_id) or session
         messages = session.get("messages", [])
 
-    aid = await run_in_thread(
-        tutor_generate_visual_aid,
-        user_message=last_user_msg["content"],
-        grade=session.get("grade", current["user"].get("grade", 4)),
-        subject=session.get("subject", "General"),
-        history=messages,
-        language=session.get("language", "en"),
-    )
+    try:
+        aid = await run_in_thread(
+            tutor_generate_visual_aid,
+            user_message=last_user_msg["content"],
+            grade=session.get("grade", current["user"].get("grade", 4)),
+            subject=session.get("subject", "General"),
+            history=messages,
+            language=session.get("language", "en"),
+        )
+    except Exception as err:
+        print(f"[api] generate_chat_image failed: {err}")
+        raise HTTPException(502, "Visual aid generation failed. Please try again.") from err
+
     if not aid:
         raise HTTPException(502, "Visual aid generation failed. Please try again.")
 

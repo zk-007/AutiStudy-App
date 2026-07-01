@@ -289,6 +289,74 @@ RULES:
 """
 
 
+def _is_math_subject(subject: str) -> bool:
+    subj = (subject or "").lower().strip()
+    return subj in {"maths", "math", "mathematics", "ریاضی"}
+
+
+_MATH_PROBLEM_TRIGGERS = (
+    "solve", "calculate", "find the", "work out", "compute", "how much",
+    "how many", "how long", "how far", "what is the value", "simplify",
+    "evaluate", "prove", "show that", "if ", "then find", "total", "remaining",
+    "perimeter", "area", "volume", "percentage", "percent", "average", "mean",
+    "ratio", "fraction of", "convert", "nearest", "round", "difference between",
+    "sum of", "product of", "quotient", "remainder", "lcm", "hcf", " gcd",
+    "equation", "algebra", "geometry", "word problem",
+)
+
+
+def _needs_full_math_solution(question: str, subject: str) -> bool:
+    """True when the student expects a complete worked solution, not a teaser."""
+    if not _is_math_subject(subject):
+        return False
+    q = (question or "").lower().strip()
+    if not q:
+        return False
+
+    # Pure vocabulary/concept with no numbers — keep the short intro style.
+    if (
+        re.match(
+            r"^(what is|what are|define|explain|tell me about|describe)\s+",
+            q,
+        )
+        and not re.search(r"\d", q)
+        and not any(t in q for t in _MATH_PROBLEM_TRIGGERS)
+    ):
+        return False
+
+    if re.search(r"\d", q):
+        return True
+    if re.search(r"\d+\s*[-+x×*/÷]\s*\d+", q):
+        return True
+    if any(t in q for t in _MATH_PROBLEM_TRIGGERS):
+        return True
+    return len(q.split()) >= 8
+
+
+def _math_full_solution_prompt_addon(language: str) -> str:
+    if language == "ur":
+        return """
+
+⚠️ اس سوال کے لیے مکمل حل ضروری ہے:
+- اوپر والے "مختصر جواب" اور "مزید بتائیں" کے اصول نظرانداز کریں۔
+- پورا سوال شروع سے آخر تک حل کریں — کوئی قدم چھوڑیں نہیں۔
+- ہر قدم نمبر دیں (قدم 1، قدم 2، ...)۔
+- درست جماعت-سطح کا طریقہ استعمال کریں (کالم، لمبی تقسیم، وغیرہ)۔
+- آخر میں واضح جواب لکھیں۔
+- لمبے یا کثیر حصوں والے سوالات کے تمام حصے مکمل کریں۔
+"""
+    return """
+
+⚠️ COMPLETE SOLUTION REQUIRED for this math problem:
+- IGNORE the "short first answer" and "tell me more" rules above.
+- Solve the ENTIRE problem in this one reply — every step from start to final answer.
+- Number each step clearly (Step 1, Step 2, ...).
+- Use the correct grade-level method (column method, long division, etc.).
+- End with a clear final answer line (e.g. "Answer: ...").
+- For long or multi-part problems, finish ALL parts — never stop halfway or defer steps.
+"""
+
+
 def generate_response(
     user_message: str,
     grade: int,
@@ -365,6 +433,10 @@ def generate_response(
             context = ""
             is_from_textbook = False
 
+    wants_full_math = _needs_full_math_solution(user_message, subject)
+    if wants_full_math and query_related_to_subject:
+        is_from_textbook = True
+
     # Get language-specific system prompt.
     #
     # We use plain str.replace() rather than str.format() because the prompt
@@ -395,6 +467,9 @@ def generate_response(
     if extra_system_hint and is_from_textbook:
         system_prompt += extra_system_hint
 
+    if wants_full_math and query_related_to_subject:
+        system_prompt += _math_full_solution_prompt_addon(language)
+
     messages = [{"role": "system", "content": system_prompt}]
 
     for msg in chat_history[-10:]:
@@ -405,12 +480,22 @@ def generate_response(
 
     messages.append({"role": "user", "content": user_message})
 
+    if wants_full_math and query_related_to_subject:
+        max_tokens = 1800
+        temperature = 0.5
+    elif is_from_textbook:
+        max_tokens = 600
+        temperature = 0.7
+    else:
+        max_tokens = 350
+        temperature = 0.7
+
     try:
         response = client.chat.completions.create(
             model="gpt-4o-mini",
             messages=messages,
-            temperature=0.7,
-            max_tokens=350 if not is_from_textbook else 600,
+            temperature=temperature,
+            max_tokens=max_tokens,
         )
         text = response.choices[0].message.content
         return _wrap(

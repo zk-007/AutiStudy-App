@@ -1,6 +1,6 @@
-"use client";
+﻿"use client";
 
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, type ReactNode } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useBodyScrollLock, useModalWheelScroll } from "@/lib/hooks/useBodyScrollLock";
 import {
@@ -66,6 +66,15 @@ function Row({ label, sub, children }: { label: string; sub?: string; children: 
 }
 
 // ── Section header ────────────────────────────────────────────────────────────
+/** Helper tip — always high contrast (tinted card + primary text in both themes). */
+function Tip({ children }: { children: ReactNode }) {
+  return (
+    <p className="mt-3 rounded-2xl bg-glacier-100 border border-glacier-200 px-4 py-3 text-xs text-deep leading-relaxed">
+      {children}
+    </p>
+  );
+}
+
 function SectionHeader({ emoji, title, color }: { emoji: string; title: string; color: string }) {
   return (
     <div className={`flex items-center gap-3 rounded-2xl bg-gradient-to-r ${color} px-5 py-4 mb-5 text-white shadow-md`}>
@@ -175,11 +184,11 @@ function AppearanceSection() {
           <Toggle checked={settings.reduceMotion} onChange={v => updateSetting("reduceMotion", v)} />
         </Row>
       </div>
-      <p className="mt-3 text-xs text-deep-muted px-1">
+      <Tip>
         {isUr
           ? "ڈارک موڈ کم روشنی والے ماحول کے لیے نرم سیاہ، نیلا، سبز اور سرمئی رنگ استعمال کرتا ہے۔"
           : "Dark mode uses calm black, blue, green and grey tones — easier on the eyes in low light."}
-      </p>
+      </Tip>
     </div>
   );
 }
@@ -380,11 +389,11 @@ function VoiceSection() {
           {previewError}
         </p>
       )}
-      <p className="mt-3 text-xs text-deep-muted px-1">
+      <Tip>
         {isUr
           ? "یہ ترتیبات ہر جگہ لاگو ہوتی ہیں جہاں آپ کا ٹیوٹر بلند آواز میں پڑھتا ہے۔ Preview کے لیے لاگ اِن ضروری ہے۔"
           : "These settings apply everywhere your tutor reads answers aloud. Login is required to preview."}
-      </p>
+      </Tip>
     </div>
   );
 }
@@ -518,11 +527,11 @@ function ProfileSection() {
             </Row>
           )}
         </div>
-        <p className="mt-3 text-xs text-deep-muted px-1">
+        <Tip>
           {isUr
             ? "بچے کی پیش رفت Parent Dashboard پر دیکھیں۔ Family لنک Settings → Family سے بھی دیکھ سکتے ہیں۔"
             : "Track your child’s progress on the Parent Dashboard. Family link details are also under Settings → Family."}
-        </p>
+        </Tip>
       </div>
     );
   }
@@ -579,14 +588,16 @@ function ProfileSection() {
               <span className="text-amber-500 font-bold text-sm">⭐ {user?.stars ?? 0}</span>
             </Row>
           </div>
-          <div className="mt-3 rounded-2xl bg-glacier-50 border border-glacier-200 px-4 py-3 text-xs text-deep leading-relaxed">
+          <Tip>
             {isUr
               ? "والدین کو جوڑنے یا درخواست منظور کرنے کے لیے Settings → Family کھولیں۔ منظوری کا لنک آپ کی ای میل پر بھی آتا ہے۔"
               : "To invite a parent or Approve a link request, open Settings → Family. Approval links are also sent to your email."}
-          </div>
-          <p className="mt-3 text-xs text-deep-muted px-1">
-            {isUr ? "نام تبدیل کرنے کے لیے ادارے سے رابطہ کریں۔ گریڈ Settings → Account سے بدل سکتے ہیں۔" : "To change your name, contact your school. You can change grade from Settings → Account."}
-          </p>
+          </Tip>
+          <Tip>
+            {isUr
+              ? "نام تبدیل کرنے کے لیے ادارے سے رابطہ کریں۔ گریڈ Settings → Account سے بدل سکتے ہیں۔"
+              : "To change your name, contact your school. You can change grade from Settings → Account."}
+          </Tip>
         </>
       )}
     </div>
@@ -1589,16 +1600,16 @@ export function SettingsModal() {
             animate={{ scale: 1, opacity: 1, y: 0 }}
             exit={{ scale: 0.94, opacity: 0, y: 12 }}
             transition={{ duration: 0.25, ease: "easeOut" }}
-            className="w-full max-w-2xl max-h-[88vh] rounded-3xl bg-white/95 shadow-2xl flex flex-col overflow-hidden border border-glacier-100"
+            className="w-full max-w-2xl max-h-[88vh] rounded-3xl bg-glacier-50 shadow-2xl flex flex-col overflow-hidden border border-glacier-200"
           >
             {/* Header */}
-            <div className="flex items-center justify-between px-6 py-4 border-b border-glacier-100 flex-shrink-0">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-glacier-200 flex-shrink-0 bg-glacier-100">
               <div className="flex items-center gap-3">
                 <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-violet-500 to-purple-600 text-white text-lg">⚙️</div>
                 <h1 className="font-display text-xl font-extrabold text-deep">{isUr ? "ترتیبات" : "Settings"}</h1>
               </div>
               <button onClick={closeSettings}
-                className="flex h-9 w-9 items-center justify-center rounded-xl bg-glacier-50 border border-glacier-200 text-deep-soft hover:text-deep hover:bg-white transition-all">
+                className="flex h-9 w-9 items-center justify-center rounded-xl bg-glacier-50 border border-glacier-200 text-deep-soft hover:text-deep hover:bg-glacier-200 transition-all">
                 <X size={18} />
               </button>
             </div>
@@ -1606,10 +1617,10 @@ export function SettingsModal() {
             {/* Body: sidebar + content */}
             <div className="flex flex-1 overflow-hidden">
               {/* Sidebar */}
-              <nav className="w-44 flex-shrink-0 min-h-0 border-r border-glacier-100 py-3 overflow-x-hidden overflow-y-auto overscroll-y-contain modal-scroll bg-glacier-50/50">
+              <nav className="w-44 flex-shrink-0 min-h-0 border-r border-glacier-200 py-3 overflow-x-hidden overflow-y-auto overscroll-y-contain modal-scroll bg-glacier-100">
                 {SIDEBAR.map(item => (
                   <button key={item.id} onClick={() => setActive(item.id)}
-                    className={`w-full flex items-center gap-2.5 px-4 py-3 text-sm font-bold transition-all rounded-r-xl mr-2 ${active === item.id ? "bg-white text-violet-700 shadow-sm border-l-2 border-violet-500" : "text-deep-soft hover:text-deep hover:bg-white/60"}`}
+                    className={`w-full flex items-center gap-2.5 px-4 py-3 text-sm font-bold transition-all rounded-r-xl mr-2 ${active === item.id ? "bg-glacier-50 text-sky-700 dark:text-sky-300 shadow-sm border-l-2 border-sky-500" : "text-deep-soft hover:text-deep hover:bg-glacier-50/80"}`}
                   >
                     <span className="text-base">{item.emoji}</span>
                     <span className="truncate">{isUr ? item.labelUr : item.label}</span>
@@ -1618,8 +1629,8 @@ export function SettingsModal() {
                 ))}
               </nav>
 
-              {/* Content */}
-              <div className="flex-1 min-h-0 overflow-y-auto overscroll-y-contain modal-scroll px-6 py-5 bg-gradient-to-br from-violet-50/30 via-white to-purple-50/30">
+              {/* Content — theme tokens only (no light violet/white wash in dark mode) */}
+              <div className="flex-1 min-h-0 overflow-y-auto overscroll-y-contain modal-scroll px-6 py-5 bg-glacier-50">
                 <AnimatePresence mode="wait">
                   <motion.div key={active}
                     initial={{ opacity: 0, x: 10 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -10 }}

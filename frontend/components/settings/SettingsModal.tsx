@@ -471,7 +471,7 @@ function ProfileSection() {
     return (
       <div>
         <SectionHeader emoji="👤" title={isUr ? "پروفائل" : "Profile"} color="from-amber-500 to-orange-500" />
-        <p className="text-sm text-deep-muted px-1">{isUr ? "لوڈ ہو رہا ہے…" : "Loading…"}</p>
+        <p className="text-sm text-deep px-1">{isUr ? "لوڈ ہو رہا ہے…" : "Loading…"}</p>
       </div>
     );
   }
@@ -1121,7 +1121,7 @@ function AccountSection() {
     return (
       <div>
         <SectionHeader emoji="🔒" title={isUr ? "اکاؤنٹ" : "Account"} color="from-rose-500 to-pink-600" />
-        <p className="text-sm text-deep-muted px-1">{isUr ? "لوڈ ہو رہا ہے…" : "Loading…"}</p>
+        <p className="text-sm text-deep px-1">{isUr ? "لوڈ ہو رہا ہے…" : "Loading…"}</p>
       </div>
     );
   }
@@ -1455,7 +1455,7 @@ function FamilySection() {
     return (
       <div>
         <SectionHeader emoji="👨‍👩‍👧" title={isUr ? "خاندان" : "Family"} color="from-sky-700 to-slate-900" />
-        <p className="text-sm text-deep-muted px-1">{isUr ? "لوڈ ہو رہا ہے…" : "Loading…"}</p>
+        <p className="text-sm text-deep px-1">{isUr ? "لوڈ ہو رہا ہے…" : "Loading…"}</p>
       </div>
     );
   }

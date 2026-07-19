@@ -39,9 +39,9 @@ import {
   RotateCcw,
   ClipboardList,
   ImagePlus,
-  Volume2,
 } from "lucide-react";
 import { NavBar } from "@/components/layout/NavBar";
+import { AudioControls } from "@/components/chat/AudioControls";
 import { useLocale } from "@/lib/i18n/LocaleProvider";
 import { useAuth } from "@/lib/auth/AuthProvider";
 import { useSettings } from "@/lib/settings/SettingsContext";
@@ -51,15 +51,17 @@ import type { AgentActionPayload } from "@/lib/agent/mediaAgentTypes";
 import { resolveAgentContent, resolveSideEffects } from "@/lib/agent/mediaAgentTools";
 import { AdaptiveAgentPanel } from "@/components/agent/AdaptiveAgentPanel";
 import { CameraConsentModal } from "@/components/agent/CameraConsentModal";
-import { UnderstandingCheck } from "@/components/agent/UnderstandingCheck";
+import { ThumbsFeedbackBar } from "@/components/agent/ThumbsFeedbackBar";
+import { CvHappyFollowUpBar } from "@/components/agent/CvHappyFollowUpBar";
 import { BreathingModal } from "@/components/agent/BreathingModal";
-import { StepMcqPanel } from "@/components/agent/StepMcqPanel";
 import { useComprehensionFlow } from "@/lib/hooks/useComprehensionFlow";
+import { stripTutorStubLines } from "@/lib/agent/stripTutorStubLines";
 import { useBodyScrollLock, useModalWheelScroll } from "@/lib/hooks/useBodyScrollLock";
 import { shouldShowComprehensionPopup } from "@/lib/agent/comprehensionGate";
+import { ModalityChoiceBar } from "@/components/agent/ModalityChoiceBar";
 import { mergeVisualAidIntoMessage } from "@/lib/chat/mergeVisualAid";
 import { normalizeMath } from "@/lib/chat/normalizeMath";
-import { playTtsAudio } from "@/lib/audio/playTtsAudio";
+import { useTtsController } from "@/lib/hooks/useTtsController";
 import { loginUrlFor } from "@/lib/auth/redirect";
 import { QuizMarkdown } from "@/lib/quiz/QuizMarkdown";
 import {
@@ -193,7 +195,7 @@ function CenteredMessage({ text }: { text: string }) {
   return (
     <div className="flex-1 flex items-center justify-center">
       <div className="flex items-center gap-3 text-deep-soft">
-        <span className="inline-block w-3 h-3 rounded-full bg-glacier-400 animate-pulse" />
+        <span className="inline-block w-3 h-3 rounded-full bg-glacier-500 animate-pulse" />
         <span>{text}</span>
       </div>
     </div>
@@ -237,7 +239,7 @@ function SubjectPicker({ grade }: { grade: number }) {
         <h1 className="font-display text-3xl md:text-4xl font-extrabold text-deep">
           {t.pages.chat.pickSubjectTitle}
         </h1>
-        <p className="mt-3 text-deep-soft">
+        <p className="mt-3 text-deep-soft leading-relaxed">
           {t.pages.chat.pickSubjectSub} ({t.pages.dashboard.gradeLabel} {grade})
         </p>
 
@@ -319,8 +321,7 @@ function Conversation({ sessionId }: { sessionId: string }) {
   // while an image renders or audio loads.
   const [imageBusy, setImageBusy] = useState(false);
   const [imageError, setImageError] = useState<string | null>(null);
-  const [speakingIndex, setSpeakingIndex] = useState<number | null>(null);
-  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const tts = useTtsController(locale === "ur" ? "ur" : "en");
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const answerEndRef = useRef<HTMLDivElement | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
@@ -352,7 +353,7 @@ function Conversation({ sessionId }: { sessionId: string }) {
   const speakForFlowRef = useRef<((text: string) => Promise<void>) | null>(null);
   const imageBusyRef = useRef(false);
   const sendingRef = useRef(false);
-  const speakingIndexRef = useRef<number | null>(null);
+  const ttsActiveIndexRef = useRef<number | null>(null);
   const ttsAutoReadRef = useRef(settings.ttsAutoRead);
   const cameraBootstrappedRef = useRef(false);
   const cameraUserStoppedRef = useRef(false);
@@ -361,7 +362,7 @@ function Conversation({ sessionId }: { sessionId: string }) {
   ttsAutoReadRef.current = settings.ttsAutoRead;
   imageBusyRef.current = imageBusy;
   sendingRef.current = sending;
-  speakingIndexRef.current = speakingIndex;
+  ttsActiveIndexRef.current = tts.activeIndex;
 
   /** Resolve text to read aloud for voice-aid tools. */
   const getVoiceText = useCallback((
@@ -418,7 +419,7 @@ function Conversation({ sessionId }: { sessionId: string }) {
     if (
       effects.triggerVoice &&
       ttsAutoReadRef.current &&
-      speakingIndexRef.current === null &&
+      ttsActiveIndexRef.current === null &&
       !sendingRef.current
     ) {
       const voiceText = getVoiceText(payload, content, priorMessages);
@@ -466,27 +467,63 @@ function Conversation({ sessionId }: { sessionId: string }) {
   });
 
   // ── Comprehension flow callbacks (popup ladder) ───────────────────────────
-  const appendAssistantMessage = useCallback((content: string) => {
-    setSession((prev) => {
-      if (!prev) return prev;
-      return {
-        ...prev,
-        messages: [
-          ...prev.messages,
-          {
-            role: "assistant" as const,
-            content,
-            timestamp: new Date().toISOString(),
-            image_url: null,
-          },
-        ],
-      };
-    });
+  const appendAssistantMessage = useCallback((content: string): number => {
+    const prev = sessionRef.current;
+    if (!prev) return -1;
+    const updated = {
+      ...prev,
+      messages: [
+        ...prev.messages,
+        {
+          role: "assistant" as const,
+          content,
+          timestamp: new Date().toISOString(),
+          image_url: null,
+        },
+      ],
+    };
+    sessionRef.current = updated;
+    setSession(updated);
+    return updated.messages.length - 1;
   }, []);
+
+  const replaceLastAssistantMessage = useCallback(
+    (content: string, opts?: { clearVisual?: boolean }) => {
+      setSession((prev) => {
+        if (!prev) return prev;
+        const msgs = [...prev.messages];
+        for (let i = msgs.length - 1; i >= 0; i -= 1) {
+          if (msgs[i].role === "assistant") {
+            msgs[i] = opts?.clearVisual
+              ? {
+                  role: "assistant" as const,
+                  content,
+                  timestamp: msgs[i].timestamp,
+                  image_url: null,
+                }
+              : { ...msgs[i], content };
+            break;
+          }
+        }
+        const updated = { ...prev, messages: msgs };
+        sessionRef.current = updated;
+        return updated;
+      });
+    },
+    [],
+  );
 
   const comprehensionCallbacks = useMemo(
     () => ({
       onAppendMessage: appendAssistantMessage,
+      onReplaceLastAssistantMessage: replaceLastAssistantMessage,
+      getLastAssistantIndex: () => {
+        const msgs = sessionRef.current?.messages ?? [];
+        for (let i = msgs.length - 1; i >= 0; i -= 1) {
+          if (msgs[i].role === "assistant") return i;
+        }
+        return -1;
+      },
       onGenerateImage: async () => {
         imageFromFlowRef.current = true;
         try {
@@ -495,10 +532,22 @@ function Conversation({ sessionId }: { sessionId: string }) {
           imageFromFlowRef.current = false;
         }
       },
-      onSpeak: (text: string) =>
-        speakForFlowRef.current?.(text) ?? Promise.resolve(),
+      onSpeak: (text: string, messageIndex?: number) => {
+        const msgs = sessionRef.current?.messages ?? [];
+        let idx = messageIndex;
+        if (idx === undefined || idx < 0) {
+          for (let i = msgs.length - 1; i >= 0; i -= 1) {
+            if (msgs[i].role === "assistant") {
+              idx = i;
+              break;
+            }
+          }
+        }
+        if (idx === undefined || idx < 0) return Promise.resolve();
+        return tts.play(idx, text);
+      },
     }),
-    [appendAssistantMessage],
+    [appendAssistantMessage, replaceLastAssistantMessage, tts],
   );
 
   const lastUserQuestion = useMemo(() => {
@@ -515,13 +564,18 @@ function Conversation({ sessionId }: { sessionId: string }) {
 
   const {
     flow: comprehensionFlow,
+    modalityChoices,
+    getInitialSendAction: flowGetInitialSendAction,
     onAssistantAnswer: flowOnAssistantAnswer,
+    onPreferredAnswerDelivery: flowOnPreferredAnswerDelivery,
     onStudentQuestion: flowOnStudentQuestion,
     onPopupYes: flowOnPopupYes,
     onPopupNo: flowOnPopupNo,
+    onModalityChosen: flowOnModalityChosen,
+    onCvHappyMoveOn: flowOnCvHappyMoveOn,
+    onCvHappyWantsOptions: flowOnCvHappyWantsOptions,
     onAttemptSendWhileBlocked: flowOnAttemptBlocked,
     onBreathingComplete: flowOnBreathingComplete,
-    onMcqAnswered: flowOnMcqAnswered,
   } = useComprehensionFlow({
     sessionId,
     subject: session?.subject ?? "General",
@@ -529,6 +583,10 @@ function Conversation({ sessionId }: { sessionId: string }) {
     hybridScores: adaptiveState.teachingEmotion?.hybridScores ?? null,
     hybridDominant: adaptiveState.teachingEmotion?.hybridDominant ?? null,
     cameraEnabled: adaptiveState.cameraEnabled,
+    ttsBusy:
+      tts.state === "loading" ||
+      tts.state === "playing" ||
+      tts.state === "paused",
     lastQuestion: lastUserQuestion,
     lastAnswer: lastAssistantAnswer,
     messageCount: session?.messages.length ?? 0,
@@ -539,10 +597,6 @@ function Conversation({ sessionId }: { sessionId: string }) {
 
   const inputBlocked =
     comprehensionFlow.blockInput ||
-    comprehensionFlow.showPopup ||
-    comprehensionFlow.pendingPopup ||
-    comprehensionFlow.imageViewActive ||
-    comprehensionFlow.mcqActive ||
     comprehensionFlow.showBreathing;
 
   // ── Camera consent flow ───────────────────────────────────────────────────
@@ -608,6 +662,10 @@ function Conversation({ sessionId }: { sessionId: string }) {
   // ── Popup after bot answer (scroll gate — not on every assistant stub) ───
   const flowOnAssistantAnswerRef = useRef(flowOnAssistantAnswer);
   flowOnAssistantAnswerRef.current = flowOnAssistantAnswer;
+  const flowOnPreferredAnswerRef = useRef(flowOnPreferredAnswerDelivery);
+  flowOnPreferredAnswerRef.current = flowOnPreferredAnswerDelivery;
+  const flowGetInitialSendActionRef = useRef(flowGetInitialSendAction);
+  flowGetInitialSendActionRef.current = flowGetInitialSendAction;
 
   const handleUnderstoodRef = useRef<(() => void) | null>(null);
   const handleNotUnderstoodRef = useRef<(() => void) | null>(null);
@@ -636,20 +694,21 @@ function Conversation({ sessionId }: { sessionId: string }) {
     };
   }, [sessionId, t.pages.chat.notFound, t.auth.errors.generic]);
 
+  const ttsStopRef = useRef(tts.stop);
+  ttsStopRef.current = tts.stop;
+
   // Stop any in-flight audio when the session changes or the user navigates.
   useEffect(() => {
     return () => {
-      audioRef.current?.pause();
-      audioRef.current = null;
+      ttsStopRef.current();
     };
   }, [sessionId]);
 
-  // Keep the message list scrolled to the bottom — except while waiting for read-to-end.
+  // Keep the message list scrolled to the bottom.
   useEffect(() => {
     if (!scrollRef.current) return;
-    if (comprehensionFlow.pendingPopup && comprehensionFlow.popupGate === "scroll") return;
     scrollRef.current.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
-  }, [session?.messages.length, sending, comprehensionFlow.pendingPopup, comprehensionFlow.popupGate]);
+  }, [session?.messages.length, sending]);
 
   const onSend = useCallback(
     async (overrideContent?: string) => {
@@ -662,6 +721,7 @@ function Conversation({ sessionId }: { sessionId: string }) {
 
       setSending(true);
       setSendError(null);
+      tts.stop();
 
       // Optimistically push the user bubble so the UI feels instant.
       const optimistic: ChatMessage = {
@@ -670,37 +730,48 @@ function Conversation({ sessionId }: { sessionId: string }) {
         timestamp: new Date().toISOString(),
         image_url: null,
       };
-      setSession((prev) =>
-        prev ? { ...prev, messages: [...prev.messages, optimistic] } : prev,
-      );
+      setSession((prev) => {
+        if (!prev) return prev;
+        const updated = { ...prev, messages: [...prev.messages, optimistic] };
+        sessionRef.current = updated;
+        return updated;
+      });
       setDraft("");
 
       try {
-        const preferredFormat = agentGetPreferredFormat();
-        const reply = await chatApi.send(sessionId, content, preferredFormat);
+        // Ask which format to request BEFORE sending — an on-book answer
+        // that already matches the preferred format (e.g. step-by-step)
+        // never has to show simple text first and swap it out.
+        const { action, modality: initialModality } =
+          await flowGetInitialSendActionRef.current();
+        const reply = await chatApi.send(sessionId, content, action);
         const isBookAnswer = shouldShowComprehensionPopup(reply);
+        const assistantContent = stripTutorStubLines(reply.assistant_message.content);
         setSession((prev) => {
           if (!prev) return prev;
           const next = [...prev.messages];
           if (reply.user_message) next[next.length - 1] = reply.user_message;
-          next.push(reply.assistant_message);
-          return {
+          next.push({
+            ...reply.assistant_message,
+            content: assistantContent,
+          });
+          const updated = {
             ...prev,
             messages: next,
             timestamp: reply.session.timestamp ?? prev.timestamp,
           };
+          sessionRef.current = updated;
+          return updated;
         });
-        // Always reset ladder state on a new Q&A; popup only for textbook content.
         flowOnStudentQuestion();
         if (isBookAnswer) {
           agentOnStudentNewMessage();
-          flowOnAssistantAnswerRef.current();
-          if (ttsAutoReadRef.current) {
-            const text = reply.assistant_message.content?.trim();
-            if (text) {
-              setTimeout(() => speakForFlowRef.current?.(text), 400);
-            }
-          }
+          void flowOnPreferredAnswerRef.current(
+            settings.ttsAutoRead,
+            assistantContent,
+            content,
+            initialModality,
+          );
         }
       } catch (err) {
         // Roll back optimistic message and surface the error.
@@ -715,7 +786,7 @@ function Conversation({ sessionId }: { sessionId: string }) {
         textareaRef.current?.focus();
       }
     },
-    [draft, sending, session, sessionId, t.auth.errors.generic, agentGetPreferredFormat, agentOnStudentNewMessage, flowOnStudentQuestion, flowOnAttemptBlocked, inputBlocked],
+    [draft, sending, session, sessionId, t.auth.errors.generic, agentOnStudentNewMessage, flowOnStudentQuestion, flowOnAttemptBlocked, inputBlocked, tts.stop, settings.ttsAutoRead],
   );
 
   const onKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -817,54 +888,40 @@ function Conversation({ sessionId }: { sessionId: string }) {
     setRecapOpen(false);
   }, []);
 
-  // ── Read-aloud (TTS) ──────────────────────────────────────────────────────
-  // Streams base64 MP3 from the API into an in-memory <audio> element so we
-  // never write throwaway audio to disk and so a second click cleanly stops
-  // the previous clip.
+  // ── Read-aloud (TTS) — Gap 6: profile-based auto-read + Play/Pause/Stop/Replay ─
   const onSpeak = useCallback(
     async (index: number, text: string) => {
-      if (speakingIndex === index) {
-        audioRef.current?.pause();
-        audioRef.current = null;
-        setSpeakingIndex(null);
+      if (tts.isActive(index) && tts.state === "playing") {
+        tts.pause();
         return;
       }
-      audioRef.current?.pause();
-      setSpeakingIndex(index);
-      try {
-        const { audio_base64, mime_type } = await chatApi.speak(
-          text,
-          locale === "ur" ? "ur" : "en",
-        );
-        const audio = new Audio(`data:${mime_type};base64,${audio_base64}`);
-        audioRef.current = audio;
-        await playTtsAudio(audio, { playbackRate: 1, gain: 1.35 });
-        setSpeakingIndex(null);
-      } catch (err) {
-        console.error("TTS failed", err);
-        setSpeakingIndex(null);
+      if (
+        tts.isActive(index) &&
+        (tts.state === "paused" || tts.state === "stopped")
+      ) {
+        tts.resume();
+        return;
       }
+      await tts.play(index, text);
     },
-    [locale, speakingIndex],
+    [tts],
   );
 
-  const speakForFlow = useCallback(async (text: string) => {
-    audioRef.current?.pause();
-    setSpeakingIndex(-1);
-    try {
-      const { audio_base64, mime_type } = await chatApi.speak(
-        text,
-        locale === "ur" ? "ur" : "en",
-      );
-      const audio = new Audio(`data:${mime_type};base64,${audio_base64}`);
-      audioRef.current = audio;
-      await playTtsAudio(audio, { playbackRate: 1.05, gain: 1.45 });
-      setSpeakingIndex(null);
-    } catch (err) {
-      console.error("TTS failed", err);
-      setSpeakingIndex(null);
-    }
-  }, [locale]);
+  const handleBubbleTtsPlay = useCallback(
+    (index: number, text: string) => {
+      void onSpeak(index, text);
+    },
+    [onSpeak],
+  );
+
+  const handleBubbleTtsReplay = useCallback(() => {
+    void tts.replay();
+  }, [tts]);
+
+  const speakForFlow = useCallback(
+    (text: string) => tts.speakForFlow(text),
+    [tts],
+  );
 
   onGenerateImageRef.current = onGenerateImage;
   onSpeakRef.current = onSpeak;
@@ -1032,6 +1089,12 @@ function Conversation({ sessionId }: { sessionId: string }) {
               // area keeps the UI calm and avoids accidental cost spikes.
               const isLastAssistant =
                 m.role === "assistant" && i === session.messages.length - 1;
+              const ttsActiveOnBubble = tts.isActive(i);
+              const ttsPanelVisible = tts.isPanelVisible(i);
+              const showAudioOnBubble =
+                !!config?.speech_available &&
+                !!m.content &&
+                (isLastAssistant || ttsPanelVisible);
               return (
                 <div key={`${i}-${m.timestamp}`}>
                   <Bubble
@@ -1041,13 +1104,26 @@ function Conversation({ sessionId }: { sessionId: string }) {
                     imagesAvailable={!!config?.images_available}
                     speechAvailable={!!config?.speech_available}
                     onGenerateImage={onGenerateImage}
-                    onSpeak={onSpeak}
-                    imageBusy={imageBusy}
-                    isSpeaking={speakingIndex === i}
-                    speakLabels={{
+                    ttsState={tts.state}
+                    ttsActive={ttsActiveOnBubble}
+                    onTtsPlay={() => handleBubbleTtsPlay(i, m.content)}
+                    onTtsPause={tts.pause}
+                    onTtsStop={tts.stop}
+                    onTtsDismiss={tts.dismissPanel}
+                    onTtsReplay={handleBubbleTtsReplay}
+                    ttsPanelOpen={ttsPanelVisible}
+                    ttsCurrentTime={ttsActiveOnBubble || ttsPanelVisible ? tts.currentTime : 0}
+                    ttsDuration={ttsActiveOnBubble || ttsPanelVisible ? tts.duration : 0}
+                    onTtsSeek={tts.seek}
+                    showAudioControls={showAudioOnBubble}
+                    audioLabels={{
                       play: t.pages.chat.readAloud,
+                      pause: t.pages.chat.pauseReading,
                       stop: t.pages.chat.stopReading,
+                      replay: t.pages.chat.replayReading,
+                      loading: t.pages.chat.loadingAudio,
                     }}
+                    imageBusy={imageBusy}
                     imageLabels={{
                       generate: t.pages.chat.showPicture,
                       regenerate: t.pages.chat.anotherPicture,
@@ -1055,43 +1131,39 @@ function Conversation({ sessionId }: { sessionId: string }) {
                     }}
                   />
                   {isLastAssistant &&
-                    comprehensionFlow.pendingPopup &&
-                    comprehensionFlow.popupGate === "scroll" &&
+                    comprehensionFlow.showFeedbackBar &&
                     !sending && (
-                    <div
-                      ref={answerEndRef}
-                      className="h-px w-full pointer-events-none"
-                      aria-hidden
-                      data-answer-end
+                    <ThumbsFeedbackBar
+                      key={`feedback-${comprehensionFlow.currentModality}-${comprehensionFlow.contentDeliveredAt}`}
+                      feedbackKey={`${comprehensionFlow.currentModality}-${comprehensionFlow.contentDeliveredAt}`}
+                      adaptationRound={comprehensionFlow.adaptationRound}
+                      cvHappyMode={comprehensionFlow.cvHappyMode}
+                      onThumbsUp={() => handleUnderstoodRef.current?.()}
+                      onThumbsDown={() => handleNotUnderstoodRef.current?.()}
                     />
                   )}
                   {isLastAssistant &&
-                    comprehensionFlow.showPopup &&
-                    !comprehensionFlow.mcqActive &&
+                    comprehensionFlow.showCvHappyFollowUp &&
                     !sending && (
-                    <UnderstandingCheck
-                      key={`popup-${comprehensionFlow.adaptationRound}-${comprehensionFlow.popupStartedAt}`}
-                      popupKey={`${comprehensionFlow.adaptationRound}-${comprehensionFlow.popupStartedAt}`}
-                      agentTried={comprehensionFlow.adaptationRound > 0}
-                      typingBlocked={comprehensionFlow.typingBlocked}
-                      promptIndex={comprehensionFlow.popupPromptIndex}
-                      onUnderstood={() => handleUnderstoodRef.current?.()}
-                      onNotUnderstood={() => handleNotUnderstoodRef.current?.()}
+                    <CvHappyFollowUpBar
+                      message={t.pages.chat.cvHappyGotIt}
+                      moveOnLabel={t.pages.chat.cvMoveOnNext}
+                      anotherOptionLabel={t.pages.chat.cvAnotherOption}
+                      onMoveOn={() => flowOnCvHappyMoveOn()}
+                      onAnotherOption={() => flowOnCvHappyWantsOptions()}
                     />
                   )}
                   {isLastAssistant &&
-                    comprehensionFlow.mcqActive &&
-                    comprehensionFlow.mcqQuestions[comprehensionFlow.mcqIndex] && (
-                    <StepMcqPanel
-                      key={`${comprehensionFlow.mcqPhase}-${comprehensionFlow.mcqIndex}`}
-                      question={comprehensionFlow.mcqQuestions[comprehensionFlow.mcqIndex]}
-                      stepNumber={comprehensionFlow.mcqIndex + 1}
-                      totalSteps={comprehensionFlow.mcqQuestions.length}
-                      allowTeachingDefer={
-                        comprehensionFlow.mcqPhase === "recall" &&
-                        comprehensionFlow.mcqIndex === 1
+                    comprehensionFlow.showModalityChoice &&
+                    !sending && (
+                    <ModalityChoiceBar
+                      choices={modalityChoices}
+                      onPick={(choice) => void flowOnModalityChosen(choice)}
+                      prompt={
+                        comprehensionFlow.cvModalityChoiceFromTimeout
+                          ? t.pages.chat.cvDistressedPrompt
+                          : undefined
                       }
-                      onAnswer={(result) => void flowOnMcqAnswered(result)}
                     />
                   )}
                 </div>
@@ -1111,21 +1183,9 @@ function Conversation({ sessionId }: { sessionId: string }) {
         )}
         {inputBlocked && !sending && (
           <div className="mb-2 text-xs font-semibold text-amber-700 text-center">
-            {comprehensionFlow.mcqActive
-              ? comprehensionFlow.mcqPhase === "appreciation"
-                ? "Fun check time — do your best, no pressure! 🌟"
-                : comprehensionFlow.mcqPhase === "teaching"
-                ? "Step-by-step checks — finish them before typing ✏️"
-                : "Finish the quick checks above before typing ✏️"
-              : comprehensionFlow.imageViewActive
-                ? "🎨 Study the picture for 1 minute — then the check-in will appear"
-              : comprehensionFlow.pendingPopup && comprehensionFlow.popupGate === "scroll"
-                ? "📖 Scroll to the end of the answer — check-in appears after 30 seconds of reading"
-                : comprehensionFlow.showPopup
-                  ? comprehensionFlow.adaptationRound > 0
-                    ? `Help step ${comprehensionFlow.adaptationRound}/5 — please answer the popup 👆`
-                    : "Please answer “Did you get it?” first 👆"
-                  : "Take a breath… then we'll continue 🌿"}
+            {comprehensionFlow.showBreathing
+              ? "Take a breath… then we'll continue 🌿"
+              : null}
           </div>
         )}
         <div className="flex items-end gap-3">
@@ -1142,7 +1202,7 @@ function Conversation({ sessionId }: { sessionId: string }) {
             onKeyDown={onKeyDown}
             placeholder={
               inputBlocked
-                ? "Answer the popup above first…"
+                ? "Finish the step above first…"
                 : t.pages.chat.placeholder
             }
             rows={1}
@@ -2474,10 +2534,20 @@ interface BubbleProps {
   imagesAvailable?: boolean;
   speechAvailable?: boolean;
   imageBusy?: boolean;
-  isSpeaking?: boolean;
+  ttsState?: import("@/lib/audio/TtsController").TtsPlaybackState;
+  ttsActive?: boolean;
   onGenerateImage?: () => void;
-  onSpeak?: (index: number, text: string) => void;
-  speakLabels?: { play: string; stop: string };
+  onTtsPlay?: () => void;
+  onTtsPause?: () => void;
+  onTtsStop?: () => void;
+  onTtsDismiss?: () => void;
+  onTtsReplay?: () => void;
+  ttsPanelOpen?: boolean;
+  ttsCurrentTime?: number;
+  ttsDuration?: number;
+  onTtsSeek?: (ratio: number) => void;
+  showAudioControls?: boolean;
+  audioLabels?: import("@/components/chat/AudioControls").AudioControlLabels;
   imageLabels?: { generate: string; regenerate: string; generating: string };
 }
 
@@ -2488,10 +2558,20 @@ function Bubble({
   imagesAvailable = false,
   speechAvailable = false,
   imageBusy = false,
-  isSpeaking = false,
+  ttsState = "idle",
+  ttsActive = false,
   onGenerateImage,
-  onSpeak,
-  speakLabels,
+  onTtsPlay,
+  onTtsPause,
+  onTtsStop,
+  onTtsDismiss,
+  onTtsReplay,
+  ttsPanelOpen = false,
+  ttsCurrentTime = 0,
+  ttsDuration = 0,
+  onTtsSeek,
+  showAudioControls = false,
+  audioLabels,
   imageLabels,
 }: BubbleProps) {
   const isUser = message.role === "user";
@@ -2501,7 +2581,7 @@ function Bubble({
     !!message.bar_chart || !!message.percentage_bar || !!message.times_table ||
     !!message.geometry || !!message.ratio;
   const showImageButton = showActions && imagesAvailable;
-  const showSpeakButton = showActions && speechAvailable && !!message.content;
+  const showSpeakButton = showAudioControls;
 
   return (
     <motion.div
@@ -2522,6 +2602,24 @@ function Bubble({
         >
           {isUser ? message.content : <MarkdownContent text={message.content} />}
         </div>
+
+        {/* Voice player sits directly under answer text — it reads this bubble. */}
+        {showSpeakButton && audioLabels && (
+          <AudioControls
+            state={ttsState}
+            isActive={ttsActive}
+            panelOpen={ttsPanelOpen}
+            labels={audioLabels}
+            currentTime={ttsCurrentTime}
+            duration={ttsDuration}
+            onPlay={() => onTtsPlay?.()}
+            onPause={() => onTtsPause?.()}
+            onStop={() => onTtsStop?.()}
+            onReplay={() => onTtsReplay?.()}
+            onDismiss={onTtsDismiss}
+            onSeek={ttsActive || ttsPanelOpen ? onTtsSeek : undefined}
+          />
+        )}
 
         {/* Inline illustration if the assistant attached one (countable
             arithmetic / concept questions). */}
@@ -2587,7 +2685,7 @@ function Bubble({
           <MathStepCardView card={message.math_steps} />
         )}
 
-        {(showImageButton || showSpeakButton) && (
+        {(showImageButton) && (
           <div className="flex flex-wrap gap-2 pt-1">
             {showImageButton && (
               <button
@@ -2607,20 +2705,6 @@ function Bubble({
                     {hasVisualAid ? imageLabels?.regenerate : imageLabels?.generate}
                   </>
                 )}
-              </button>
-            )}
-            {showSpeakButton && (
-              <button
-                type="button"
-                onClick={() => onSpeak?.(index, message.content)}
-                className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-bold transition-all hover:-translate-y-0.5 ${
-                  isSpeaking
-                    ? "bg-glacier-500 border-glacier-500 text-white animate-pulse"
-                    : "bg-white/80 hover:bg-white border-glacier-200 text-deep-soft hover:text-deep"
-                }`}
-              >
-                <Volume2 size={13} />
-                {isSpeaking ? speakLabels?.stop : speakLabels?.play}
               </button>
             )}
           </div>

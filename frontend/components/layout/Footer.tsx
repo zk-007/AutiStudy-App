@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useLocale } from "@/lib/i18n/LocaleProvider";
 import { Heart } from "lucide-react";
 
@@ -8,6 +9,11 @@ export function Footer() {
   return (
     <footer className="relative mt-20 border-t border-glacier-200/60 bg-white/40 backdrop-blur-md">
       <div className="mx-auto max-w-7xl px-6 py-10 text-center">
+        <div className="flex items-center justify-center gap-4 text-sm font-semibold text-deep-soft mb-4">
+          <Link href="/about" className="hover:text-deep transition-colors">{t.nav.about}</Link>
+          <Link href="/faq" className="hover:text-deep transition-colors">{t.nav.faq}</Link>
+          <Link href="/contact" className="hover:text-deep transition-colors">{t.nav.contact}</Link>
+        </div>
         <div className="flex items-center justify-center gap-2 text-deep-soft">
           <span className="text-sm">{t.footer.tagline}</span>
           <Heart size={14} className="text-glacier-500 fill-glacier-300" />

@@ -250,11 +250,11 @@ def _build_off_topic_system_prompt(
 {opener}
 
 جواب EXACTLY اس ترتیب میں دیں (آسان اردو):
-1. ایک جملے میں واضح کریں کہ یہ سوال کتاب / نصاب سے باہر ہے۔
+1. ایک مختصر جملے میں موضوع کی سادہ تعریف (اگر ممکن ہو)، پھر واضح کہیں کہ یہ موضوع ان کی Grade {grade} {subject} اپ لوڈ کردہ کتاب میں نہیں ہے۔
 2. سرخی: "آپ کی جماعت {grade} {subject} کتاب کے موضوعات:"
 3. یہ فہرست بالکل ویسی ہی لکھیں:
 {units_block}
-4. زیادہ سے زیادہ دو مختصر جملوں میں سوال سے تھوڑا سا تعلق رکھتے ہوئے hint دیں (اختیاری)۔
+4. مکمل سبق، steps یا تفصیلی وضاحت نہ دیں — تعریف صرف ایک جملے تک محدود رکھیں۔
 5. آخر میں بالکل یہ لکھیں: "براہ کرم اوپر دی گئی کتاب کے موضوعات میں سے کوئی اور سوال پوچھیں۔ 📚"
 
 قواعد:
@@ -274,11 +274,11 @@ def _build_off_topic_system_prompt(
 {opener}
 
 Reply in EXACTLY this structure (friendly, simple English):
-1. One clear sentence saying this question is outside / not in their textbook.
+1. ONE short sentence with a tiny general definition of their topic (if you can), then clearly say this topic is NOT in their uploaded Grade {grade} {subject} textbook.
 2. A heading line: "Topics in your Grade {grade} {subject} book:"
 3. Copy this list exactly:
 {units_block}
-4. At most TWO short sentences with a tiny hint related to their question (optional).
+4. Do NOT give a full lesson, steps, or detailed explanation — keep the definition to one sentence only.
 5. End with exactly: "Please ask me another question from your textbook topics above. 📚"
 
 RULES:
@@ -602,20 +602,10 @@ def generate_response(
                 context = format_context_for_prompt(documents)
                 print(f"Retrieved {len(documents)} documents for query: {user_message[:50]}...")
             elif documents and not is_from_textbook:
-                # Safety net: retrieval returned chunks but score was borderline —
-                # prefer a grounded answer over blocking a valid textbook question.
-                if relevance_score >= 0.12 or len(documents) >= 2:
-                    context = format_context_for_prompt(documents)
-                    is_from_textbook = True
-                    print(
-                        f"Using {len(documents)} borderline RAG hits "
-                        f"(score={relevance_score:.3f}): {user_message[:50]}..."
-                    )
-                else:
-                    print(
-                        f"Topic NOT in textbook (relevance: {relevance_score:.3f}, "
-                        f"related: {query_related_to_subject}): {user_message[:50]}..."
-                    )
+                print(
+                    f"Topic NOT in textbook (relevance: {relevance_score:.3f}, "
+                    f"related: {query_related_to_subject}): {user_message[:50]}..."
+                )
             else:
                 print(
                     f"Topic NOT in textbook (relevance: {relevance_score:.3f}, "
@@ -1807,13 +1797,19 @@ def generate_image(
 # =========================================================
 # TEXT-TO-SPEECH (TTS) using OpenAI
 # =========================================================
-def generate_speech(text: str, language: str = "en") -> Optional[bytes]:
+VALID_TTS_VOICES = {"alloy", "echo", "fable", "onyx", "nova", "shimmer"}
+
+
+def generate_speech(text: str, language: str = "en", voice: Optional[str] = None) -> Optional[bytes]:
     """
     Generate speech audio from text using OpenAI TTS model.
     
     Args:
         text: The text to convert to speech
         language: Language code ("en" for English, "ur" for Urdu)
+        voice: Optional narrator override (Part B #8) — one of alloy, echo,
+            fable, onyx, nova, shimmer. Falls back to the per-language
+            default when not given or invalid.
     
     Returns:
         Audio bytes (MP3 format) or None if failed
@@ -1824,9 +1820,10 @@ def generate_speech(text: str, language: str = "en") -> Optional[bytes]:
         return None
     
     try:
-        # Use alloy voice for English, nova for Urdu (both work well)
-        # Available voices: alloy, echo, fable, onyx, nova, shimmer
-        voice = "nova" if language == "ur" else "alloy"
+        # Use alloy voice for English, nova for Urdu by default — a student's
+        # chosen narrator (Settings → Voice) overrides this when valid.
+        if voice not in VALID_TTS_VOICES:
+            voice = "nova" if language == "ur" else "alloy"
         
         # Truncate text if too long (TTS has limits)
         max_chars = 4000
@@ -1850,18 +1847,19 @@ def generate_speech(text: str, language: str = "en") -> Optional[bytes]:
         return None
 
 
-def text_to_speech_base64(text: str, language: str = "en") -> Optional[str]:
+def text_to_speech_base64(text: str, language: str = "en", voice: Optional[str] = None) -> Optional[str]:
     """
     Generate speech and return as base64-encoded string for HTML audio playback.
     
     Args:
         text: The text to convert to speech
         language: Language code ("en" for English, "ur" for Urdu)
+        voice: Optional narrator override (Part B #8)
     
     Returns:
         Base64-encoded audio string or None if failed
     """
-    audio_bytes = generate_speech(text, language)
+    audio_bytes = generate_speech(text, language, voice=voice)
     if audio_bytes:
         return base64.b64encode(audio_bytes).decode("utf-8")
     return None

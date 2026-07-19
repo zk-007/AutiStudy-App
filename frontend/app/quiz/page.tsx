@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
@@ -258,7 +258,7 @@ export default function QuizPage() {
                         transition={{ delay: i * 0.1 }}
                         onClick={() => pickSubject(sub)}
                         className={`w-full flex items-center gap-4 rounded-2xl border-2 ${meta.border} ${meta.bg} px-6 py-5 text-left shadow-sm hover:shadow-md transition-all hover:scale-[1.02] active:scale-[0.99]`}
-                      >
+                        >
                         <div className={`flex h-12 w-12 items-center justify-center rounded-xl bg-white shadow-sm ${meta.color}`}>
                           <Icon size={24} />
                         </div>

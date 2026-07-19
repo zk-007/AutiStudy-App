@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
@@ -6,12 +6,19 @@ import { motion, AnimatePresence } from "framer-motion";
 import {
   BarChart3, BookOpen, Brain, Calendar, ChevronDown, ChevronRight, ChevronUp,
   LogOut, RefreshCw, Settings, Sparkles, Star, Target,
-  Timer, Trophy, TrendingUp, TrendingDown, Minus, Zap,
+  Timer, Trophy, TrendingUp, TrendingDown, Minus, Users, Zap,
 } from "lucide-react";
 import { useSettings } from "@/lib/settings/SettingsContext";
 import {
-  ApiError, getParentToken, parentApi,
-  type ParentDashboardData, type ParentUser, setParentToken,
+  ApiError,
+  getParentToken,
+  getSelectedChildEmail,
+  parentApi,
+  setParentToken,
+  setSelectedChildEmail,
+  type ParentChildSummary,
+  type ParentDashboardData,
+  type ParentUser,
 } from "@/lib/api/client";
 import { useLocale } from "@/lib/i18n/LocaleProvider";
 
@@ -58,7 +65,7 @@ function DonutChart({ correct, wrong, correctLabel = "correct", wrongLabel = "wr
       <svg width={120} height={120}>
         <defs>
           <linearGradient id="dg" x1="0%" y1="0%" x2="100%" y2="0%">
-            <stop offset="0%" stopColor="#7c3aed" /><stop offset="100%" stopColor="#06b6d4" />
+            <stop offset="0%" stopColor="#0284c7" /><stop offset="100%" stopColor="#06b6d4" />
           </linearGradient>
         </defs>
         <circle cx={cx} cy={cy} r={r} fill="none" stroke="#f1f5f9" strokeWidth={stroke} />
@@ -71,7 +78,7 @@ function DonutChart({ correct, wrong, correctLabel = "correct", wrongLabel = "wr
       </svg>
       <div className="flex gap-4 text-sm">
         <div className="flex items-center gap-1.5">
-          <div className="h-3 w-3 rounded-full bg-gradient-to-r from-violet-600 to-cyan-500" />
+          <div className="h-3 w-3 rounded-full bg-gradient-to-r from-glacier-600 to-glacier-500" />
           <span className="font-bold text-deep">{correct}</span>
           <span className="text-deep-soft">{correctLabel}</span>
         </div>
@@ -108,8 +115,8 @@ function ScoreTrend({ data, noDataLabel = "No trend data yet" }: {
     <svg viewBox={`0 0 ${W} ${H}`} className="w-full" preserveAspectRatio="none" style={{ height: 90 }}>
       <defs>
         <linearGradient id="lg" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor="#7c3aed" stopOpacity={0.25} />
-          <stop offset="100%" stopColor="#7c3aed" stopOpacity={0} />
+          <stop offset="0%" stopColor="#0ea5e9" stopOpacity={0.28} />
+          <stop offset="100%" stopColor="#0ea5e9" stopOpacity={0} />
         </linearGradient>
       </defs>
       {[25, 50, 75].map(v => {
@@ -117,12 +124,12 @@ function ScoreTrend({ data, noDataLabel = "No trend data yet" }: {
         return <line key={v} x1={pad} y1={y} x2={W - pad} y2={y} stroke="#f1f5f9" strokeWidth={1} />;
       })}
       <path d={area} fill="url(#lg)" />
-      <motion.polyline points={poly} fill="none" stroke="#7c3aed" strokeWidth={2.5}
+      <motion.polyline points={poly} fill="none" stroke="#0284c7" strokeWidth={2.5}
         strokeLinecap="round" strokeLinejoin="round"
         initial={{ pathLength: 0 }} animate={{ pathLength: 1 }} transition={{ duration: 1.2 }} />
       {pts.map((p, i) => (
         <g key={i}>
-          <circle cx={p.x} cy={p.y} r={4} fill="white" stroke="#7c3aed" strokeWidth={2} />
+          <circle cx={p.x} cy={p.y} r={4} fill="white" stroke="#0284c7" strokeWidth={2} />
           <title>{p.subject}: {p.score}%</title>
         </g>
       ))}
@@ -136,8 +143,8 @@ function ScoreTrend({ data, noDataLabel = "No trend data yet" }: {
 // ── Speed bars ────────────────────────────────────────────────────────────────
 function SpeedBar({ subject, avgSec, max, secPerQLabel = "s / q" }: { subject: string; avgSec: number; max: number; secPerQLabel?: string }) {
   const pct = max > 0 ? (avgSec / max) * 100 : 0;
-  const cls = avgSec <= 20 ? "from-emerald-500 to-teal-400"
-    : avgSec <= 40 ? "from-sky-500 to-cyan-400" : "from-orange-500 to-amber-400";
+  const cls = avgSec <= 20 ? "from-mint-300 to-mint-400"
+    : avgSec <= 40 ? "from-glacier-500 to-glacier-400" : "from-orange-500 to-amber-400";
   return (
     <div className="space-y-1.5">
       <div className="flex justify-between text-sm">
@@ -154,8 +161,8 @@ function SpeedBar({ subject, avgSec, max, secPerQLabel = "s / q" }: { subject: s
 
 // ── Subject accuracy bars ─────────────────────────────────────────────────────
 function SubjectBar({ subject, accuracy, attempts }: { subject: string; accuracy: number; attempts: number }) {
-  const cls = accuracy >= 80 ? "from-emerald-500 to-teal-500"
-    : accuracy >= 60 ? "from-sky-500 to-cyan-500" : "from-rose-500 to-orange-400";
+  const cls = accuracy >= 80 ? "from-mint-300 to-glacier-500"
+    : accuracy >= 60 ? "from-glacier-500 to-deep" : "from-rose-500 to-orange-400";
   return (
     <div className="space-y-1.5">
       <div className="flex justify-between text-sm">
@@ -186,7 +193,7 @@ function ActivityChart({ days }: { days: { date: string; questions: number }[] }
                 initial={{ height: 0 }} animate={{ height: h }}
                 transition={{ duration: 0.6 }}
                 style={{ height: h, minHeight: 3 }}
-                className="w-full rounded-t-md bg-gradient-to-t from-violet-600 to-purple-400"
+                className="w-full rounded-t-md bg-gradient-to-t from-glacier-600 to-glacier-400"
                 title={`${d.questions} questions on ${d.date}`}
               />
             </div>
@@ -207,8 +214,8 @@ function QuizStatsPanel({ q, correctLabel = "✓ Correct", wrongLabel = "✗ Wro
   const correct = q.num_correct;
   const wrong = q.num_questions - q.num_correct;
   const pct = Math.round(q.score_percent);
-  const barColor = pct >= 80 ? "from-emerald-500 to-teal-500"
-    : pct >= 60 ? "from-sky-500 to-cyan-500" : "from-rose-500 to-orange-400";
+  const barColor = pct >= 80 ? "from-mint-300 to-glacier-500"
+    : pct >= 60 ? "from-glacier-500 to-deep" : "from-rose-500 to-orange-400";
 
   return (
     <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }}
@@ -246,7 +253,7 @@ function QuizStatsPanel({ q, correctLabel = "✓ Correct", wrongLabel = "✗ Wro
         <div className="grid grid-cols-2 gap-3 text-sm">
           {q.avg_time_per_question != null && (
             <div className="flex items-center gap-2 text-deep-soft">
-              <Timer size={14} className="text-violet-500 flex-shrink-0" />
+              <Timer size={14} className="text-glacier-500 flex-shrink-0" />
               <span><b className="text-deep">{q.avg_time_per_question}s</b> {perQuestionLabel}</span>
             </div>
           )}
@@ -287,7 +294,7 @@ function QuizRow({ q, statsBtnLabel = "Stats", correctLabel, wrongLabel, perQues
   const [open, setOpen] = useState(false);
   const pct = Math.round(q.score_percent);
   const badge = pct >= 80 ? "text-emerald-600 bg-emerald-50 border-emerald-200"
-    : pct >= 60 ? "text-sky-600 bg-sky-50 border-sky-200" : "text-rose-600 bg-rose-50 border-rose-200";
+    : pct >= 60 ? "text-glacier-600 bg-glacier-50 border-glacier-200" : "text-rose-600 bg-rose-50 border-rose-200";
 
   return (
     <div className="rounded-2xl border border-glacier-100 bg-white/60 overflow-hidden">
@@ -304,7 +311,7 @@ function QuizRow({ q, statsBtnLabel = "Stats", correctLabel, wrongLabel, perQues
         </div>
         <div className="flex items-center gap-2 flex-shrink-0">
           <span className="text-xs text-deep-muted hidden sm:block">{new Date(q.timestamp).toLocaleDateString()}</span>
-          <div className="flex items-center gap-1 rounded-lg bg-violet-50 border border-violet-200 px-2 py-1 text-xs font-bold text-violet-700">
+          <div className="flex items-center gap-1 rounded-lg bg-glacier-50 border border-glacier-200 px-2 py-1 text-xs font-bold text-glacier-700">
             {open ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
             {statsBtnLabel}
           </div>
@@ -327,10 +334,15 @@ function MetricCard({ icon, label, value, sub, gradient }: {
   icon: React.ReactNode; label: string; value: string | number; sub?: string; gradient: string;
 }) {
   return (
-    <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}
-      className="flex flex-col gap-3 rounded-2xl bg-white/90 border border-glacier-100 p-5 shadow-soft"
+    <motion.div
+      initial={{ opacity: 0, y: 10 }}
+      animate={{ opacity: 1, y: 0 }}
+      whileHover={{ y: -2 }}
+      transition={{ duration: 0.25 }}
+      className="relative overflow-hidden flex flex-col gap-3 rounded-2xl bg-white/85 border border-white/80 p-5 shadow-[0_10px_30px_-16px_rgba(15,39,68,0.28)] backdrop-blur-sm"
     >
-      <div className={`flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br ${gradient} text-white shadow`}>{icon}</div>
+      <div className={`pointer-events-none absolute -right-6 -top-6 h-20 w-20 rounded-full bg-gradient-to-br ${gradient} opacity-15`} />
+      <div className={`flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br ${gradient} text-white shadow-md`}>{icon}</div>
       <div>
         <div className="text-xs text-deep-soft font-medium">{label}</div>
         <div className="font-display text-2xl font-extrabold text-deep leading-tight mt-0.5">{value}</div>
@@ -343,11 +355,13 @@ function MetricCard({ icon, label, value, sub, gradient }: {
 // ── Section wrapper ───────────────────────────────────────────────────────────
 function Section({ icon, title, children }: { icon: React.ReactNode; title: string; children: React.ReactNode }) {
   return (
-    <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}
-      className="rounded-3xl bg-white/90 border border-glacier-100 shadow-soft p-6"
+    <motion.div
+      initial={{ opacity: 0, y: 10 }}
+      animate={{ opacity: 1, y: 0 }}
+      className="rounded-3xl bg-white/85 border border-white/70 shadow-[0_12px_36px_-20px_rgba(15,39,68,0.3)] backdrop-blur-sm p-6"
     >
       <div className="flex items-center gap-2 mb-5">
-        <div className="text-violet-600">{icon}</div>
+        <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-glacier-50 text-glacier-700">{icon}</div>
         <h2 className="font-display text-lg font-extrabold text-deep">{title}</h2>
       </div>
       {children}
@@ -364,43 +378,285 @@ export default function ParentDashboard() {
   const { openSettings } = useSettings();
 
   const [parent, setParent] = useState<ParentUser | null>(null);
+  const [children, setChildren] = useState<ParentChildSummary[]>([]);
+  const [selectedChild, setSelectedEmail] = useState<string | null>(null);
+  const [needsPick, setNeedsPick] = useState(false);
   const [data, setData] = useState<RichDashboard | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [needsLink, setNeedsLink] = useState(false);
+  const [linkMessage, setLinkMessage] = useState<string | null>(null);
+  const [inviteCode, setInviteCode] = useState("");
+  const [redeemBusy, setRedeemBusy] = useState(false);
+  const [redeemError, setRedeemError] = useState<string | null>(null);
+  const [showAddChild, setShowAddChild] = useState(false);
 
-  const load = useCallback(async () => {
+  const loadDashboardFor = useCallback(async (childEmail: string) => {
+    const dash = await parentApi.dashboard(childEmail);
+    setSelectedEmail(childEmail);
+    setSelectedChildEmail(childEmail);
+    setData(dash as RichDashboard);
+    setNeedsPick(false);
+    setNeedsLink(false);
+  }, []);
+
+  const load = useCallback(async (opts?: { forcePick?: boolean }) => {
     const token = getParentToken();
     if (!token) { router.push("/login"); return; }
-    setLoading(true); setError(null);
+    setLoading(true); setError(null); setNeedsLink(false); setLinkMessage(null);
+    setNeedsPick(false); setShowAddChild(false);
     try {
-      const [me, dash] = await Promise.all([parentApi.me(), parentApi.dashboard()]);
+      const me = await parentApi.me();
       setParent(me);
-      setData(dash as RichDashboard);
+      const listRes = await parentApi.children();
+      const kids = listRes.children || [];
+      setChildren(kids);
+
+      const pendingOnly = kids.length === 0 && !!listRes.pending_child_email;
+      if (kids.length === 0) {
+        setData(null);
+        setSelectedEmail(null);
+        setSelectedChildEmail(null);
+        setNeedsLink(true);
+        setLinkMessage(
+          pendingOnly
+            ? "Waiting for your child to Approve via their email (or Settings → Family)."
+            : "No linked child yet. Enter a Family Invitation Code from your child.",
+        );
+        return;
+      }
+
+      const stored = getSelectedChildEmail();
+      const validStored =
+        stored && kids.some((k) => k.email === stored) ? stored : null;
+
+      if (kids.length > 1 && (opts?.forcePick || !validStored)) {
+        setNeedsPick(true);
+        setData(null);
+        return;
+      }
+
+      const target = kids.length === 1 ? kids[0].email : (validStored as string);
+
+      try {
+        await loadDashboardFor(target);
+      } catch (dashErr) {
+        if (dashErr instanceof ApiError && (dashErr.status === 404 || dashErr.status === 409)) {
+          setNeedsLink(true);
+          setLinkMessage(dashErr.detail);
+          setData(null);
+        } else if (dashErr instanceof ApiError && dashErr.status === 400) {
+          setNeedsPick(true);
+          setData(null);
+        } else {
+          throw dashErr;
+        }
+      }
     } catch (e) {
       if (e instanceof ApiError && e.status === 401) { setParentToken(null); router.push("/login"); }
       else setError(e instanceof ApiError ? e.detail : pd.loadFailed);
     } finally { setLoading(false); }
-  }, [router, pd.loadFailed]);
+  }, [router, pd.loadFailed, loadDashboardFor]);
 
-  useEffect(() => { load(); }, [load]);
-  const logout = () => { parentApi.logout().catch(() => {}); setParentToken(null); router.push("/"); };
+  useEffect(() => { void load(); }, [load]);
+  const logout = () => {
+    parentApi.logout().catch(() => {});
+    setParentToken(null);
+    setSelectedChildEmail(null);
+    router.push("/");
+  };
+
+  const redeem = async () => {
+    setRedeemBusy(true);
+    setRedeemError(null);
+    try {
+      await parentApi.redeemInvite(inviteCode.trim());
+      setInviteCode("");
+      await load();
+    } catch (e) {
+      setRedeemError(e instanceof ApiError ? e.detail : "Could not redeem code.");
+    } finally {
+      setRedeemBusy(false);
+    }
+  };
+
+  const relLabel = (rel?: string) =>
+    rel === "mother" ? (locale === "ur" ? "والدہ" : "Mother") : (locale === "ur" ? "والد" : "Father");
 
   if (loading) return (
-    <main className="min-h-screen flex items-center justify-center bg-gradient-to-br from-violet-50 via-white to-purple-50">
+    <main className="min-h-screen flex items-center justify-center bg-[radial-gradient(ellipse_at_top,_#e0f2fe_0%,_#f8fafc_45%,_#ecfeff_100%)]">
       <motion.div animate={{ rotate: 360 }} transition={{ duration: 1, repeat: Infinity, ease: "linear" }}>
-        <RefreshCw size={32} className="text-violet-500" />
+        <RefreshCw size={32} className="text-glacier-600" />
       </motion.div>
     </main>
   );
 
   if (error) return (
-    <main className="min-h-screen flex items-center justify-center p-6 bg-gradient-to-br from-violet-50 via-white to-purple-50">
-      <div className="text-center">
+    <main className="min-h-screen flex items-center justify-center p-6 bg-[radial-gradient(ellipse_at_top,_#e0f2fe_0%,_#f8fafc_45%,_#ecfeff_100%)]">
+      <div className="text-center rounded-3xl bg-white/90 border border-white/80 shadow-soft p-8">
         <p className="text-rose-600 font-bold mb-4">{error}</p>
-        <button onClick={load} className="rounded-xl bg-violet-600 px-5 py-2 text-white font-bold">{pd.retry}</button>
+        <button onClick={load} className="rounded-full bg-glacier-600 px-5 py-2.5 text-white font-bold">{pd.retry}</button>
       </div>
     </main>
   );
+
+  if (needsPick && parent) {
+    return (
+      <main className="min-h-screen flex items-center justify-center p-6 bg-[radial-gradient(ellipse_at_top,_#e0f2fe_0%,_#f8fafc_40%,_#ecfeff_100%)]">
+        <motion.div
+          initial={{ opacity: 0, y: 14 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="w-full max-w-lg rounded-3xl bg-white/90 border border-white/80 shadow-[0_20px_50px_-24px_rgba(15,39,68,0.35)] backdrop-blur-md p-8"
+        >
+          <div className="text-center mb-6">
+            <div className="mx-auto mb-3 flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br from-glacier-100 to-glacier-200 text-3xl">
+              👨‍👩‍👧
+            </div>
+            <h1 className="font-display text-2xl font-extrabold text-deep">
+              {locale === "ur" ? "بچہ منتخب کریں" : "Choose a child"}
+            </h1>
+            <p className="text-sm text-deep-soft mt-1">
+              {locale === "ur"
+                ? "آپ کے اکاؤنٹ سے ایک سے زیادہ بچے منسلک ہیں۔ جس کا ڈیش بورڈ دیکھنا ہے اسے چنیں۔"
+                : "You have multiple linked children. Pick whose dashboard you want to open."}
+            </p>
+            {parent.relationship && (
+              <p className="mt-2 text-xs font-bold text-glacier-700">
+                {locale === "ur" ? "آپ کا رول:" : "Your role:"} {relLabel(parent.relationship)}
+              </p>
+            )}
+          </div>
+          <div className="space-y-3">
+            {children.map((c) => (
+              <button
+                key={c.email}
+                type="button"
+                onClick={async () => {
+                  setLoading(true);
+                  try {
+                    await loadDashboardFor(c.email);
+                  } catch (e) {
+                    setError(e instanceof ApiError ? e.detail : pd.loadFailed);
+                  } finally {
+                    setLoading(false);
+                  }
+                }}
+                className="w-full flex items-center gap-4 rounded-2xl border border-glacier-200 bg-glacier-50/50 px-4 py-4 text-left hover:bg-glacier-100/70 hover:border-glacier-300 transition-all"
+              >
+                <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br from-glacier-500 to-deep text-2xl text-white shadow-md">
+                  🎒
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="font-display text-lg font-extrabold text-deep truncate">{c.name}</p>
+                  <p className="text-xs text-deep-soft">
+                    {pd.grade} {c.grade ?? "—"} · {relLabel(c.relationship)}
+                  </p>
+                </div>
+                <ChevronRight size={18} className="text-glacier-600 flex-shrink-0" />
+              </button>
+            ))}
+          </div>
+          <button
+            type="button"
+            onClick={() => setShowAddChild(true)}
+            className="mt-5 w-full rounded-full border border-glacier-300 bg-white px-5 py-2.5 text-sm font-bold text-glacier-700"
+          >
+            {locale === "ur" ? "دوسرا بچہ لنک کریں" : "Link another child"}
+          </button>
+          {showAddChild && (
+            <form
+              className="mt-4"
+              onSubmit={(e) => {
+                e.preventDefault();
+                if (!redeemBusy && inviteCode.trim().length >= 5) void redeem();
+              }}
+            >
+              <input
+                value={inviteCode}
+                onChange={(e) => setInviteCode(e.target.value.toUpperCase())}
+                placeholder="FAM-XXXXX"
+                className="w-full rounded-2xl border border-glacier-200 bg-glacier-50/40 px-4 py-3 text-center font-mono tracking-widest text-lg mb-3 outline-none focus:ring-4 focus:ring-glacier-200/60"
+              />
+              {redeemError && <p className="text-sm text-rose-600 mb-3">{redeemError}</p>}
+              <button
+                type="submit"
+                disabled={redeemBusy || inviteCode.trim().length < 5}
+                className="w-full rounded-full bg-gradient-to-r from-glacier-600 to-deep px-5 py-3 text-white font-bold disabled:opacity-50"
+              >
+                {redeemBusy ? "Checking…" : "Submit invitation code"}
+              </button>
+            </form>
+          )}
+          <button type="button" onClick={logout} className="mt-4 block w-full text-sm font-bold text-deep-muted hover:text-deep">
+            Log out
+          </button>
+        </motion.div>
+      </main>
+    );
+  }
+
+  if (needsLink && parent) {
+    const pending = parent.link_status === "pending" || !!parent.pending_child_email;
+    return (
+      <main className="min-h-screen flex items-center justify-center p-6 bg-[radial-gradient(ellipse_at_top,_#e0f2fe_0%,_#f8fafc_40%,_#ecfeff_100%)]">
+        <motion.div
+          initial={{ opacity: 0, y: 14 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="w-full max-w-md rounded-3xl bg-white/90 border border-white/80 shadow-[0_20px_50px_-24px_rgba(15,39,68,0.35)] backdrop-blur-md p-8 text-center"
+        >
+          <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br from-glacier-100 to-glacier-200 text-3xl">
+            {pending ? "⏳" : "🔗"}
+          </div>
+          <h1 className="font-display text-2xl font-extrabold text-deep mb-2">
+            {pending ? "Waiting for approval" : "Link your child"}
+          </h1>
+          <p className="text-sm text-deep-soft mb-2 leading-relaxed">
+            {linkMessage ||
+              (pending
+                ? "We emailed your child an Approve link. Ask them to check Inbox/Spam, or Settings → Family."
+                : "Ask your child for a Family Invitation Code (e.g. FAM-82K7Q) from Settings → Family.")}
+          </p>
+          {parent.relationship && (
+            <p className="mb-4 text-xs font-bold text-glacier-700">
+              {locale === "ur" ? "آپ کا رول:" : "Your role:"} {relLabel(parent.relationship)}
+            </p>
+          )}
+          {!pending && (
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                if (!redeemBusy && inviteCode.trim().length >= 5) void redeem();
+              }}
+            >
+              <input
+                value={inviteCode}
+                onChange={(e) => setInviteCode(e.target.value.toUpperCase())}
+                placeholder="FAM-XXXXX"
+                autoComplete="one-time-code"
+                className="w-full rounded-2xl border border-glacier-200 bg-glacier-50/40 px-4 py-3 text-center font-mono tracking-widest text-lg mb-3 outline-none focus:ring-4 focus:ring-glacier-200/60"
+              />
+              {redeemError && <p className="text-sm text-rose-600 mb-3">{redeemError}</p>}
+              <button
+                type="submit"
+                disabled={redeemBusy || inviteCode.trim().length < 5}
+                className="w-full rounded-full bg-gradient-to-r from-glacier-600 to-deep px-5 py-3 text-white font-bold disabled:opacity-50 shadow-md"
+              >
+                {redeemBusy ? "Checking…" : "Submit invitation code"}
+              </button>
+            </form>
+          )}
+          {pending && (
+            <button type="button" onClick={() => void load()} className="rounded-full bg-gradient-to-r from-glacier-600 to-deep px-5 py-2.5 text-white font-bold shadow-md">
+              Refresh status
+            </button>
+          )}
+          <button type="button" onClick={logout} className="mt-4 block w-full text-sm font-bold text-deep-muted hover:text-deep">
+            Log out
+          </button>
+        </motion.div>
+      </main>
+    );
+  }
 
   if (!data || !parent) return null;
 
@@ -439,68 +695,87 @@ export default function ParentDashboard() {
     data.improvement == null ? null
     : data.improvement > 2  ? { text: pd.improving.replace("{n}", String(data.improvement)), icon: <TrendingUp size={13} />, cls: "text-emerald-100" }
     : data.improvement < -2 ? { text: pd.declining.replace("{n}", String(Math.abs(data.improvement))), icon: <TrendingDown size={13} />, cls: "text-rose-200" }
-    : { text: pd.stable, icon: <Minus size={13} />, cls: "text-sky-200" };
+    : { text: pd.stable, icon: <Minus size={13} />, cls: "text-glacier-200" };
 
   return (
-    <main className="relative min-h-screen bg-gradient-to-br from-violet-50 via-white to-purple-50 pb-20">
+    <main className="relative min-h-screen pb-20 overflow-hidden bg-[radial-gradient(ellipse_at_top,_#dbeafe_0%,_#f8fafc_42%,_#ecfeff_100%)]">
+      <div className="pointer-events-none absolute inset-x-0 top-0 h-72 bg-[radial-gradient(circle_at_20%_20%,rgba(14,165,233,0.18),transparent_45%),radial-gradient(circle_at_80%_0%,rgba(6,182,212,0.16),transparent_40%)]" />
 
       {/* Header */}
-      <header className="sticky top-0 z-30 border-b border-white/60 bg-white/80 backdrop-blur-md px-6 py-4 flex items-center justify-between">
+      <header className="sticky top-0 z-30 border-b border-white/70 bg-white/75 backdrop-blur-xl px-5 sm:px-6 py-3.5 flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-violet-500 to-purple-600 text-xl shadow">👨‍👩‍👧</div>
+          <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-gradient-to-br from-glacier-500 to-deep text-xl shadow-md">👨‍👩‍👧</div>
           <div>
-            <p className="text-xs text-deep-soft font-medium">{pd.title}</p>
+            <p className="text-[11px] uppercase tracking-wider text-glacier-700/80 font-bold">{pd.title}</p>
             <p className="font-display text-lg font-extrabold text-deep leading-tight">{parent.name}</p>
           </div>
         </div>
         <div className="flex items-center gap-2">
-          <button onClick={openSettings}
-            className="flex items-center gap-1.5 rounded-xl border border-violet-200 bg-violet-50 px-3 py-2 text-sm font-bold text-violet-700 hover:bg-violet-100 transition-all"
+          {children.length > 1 && (
+            <button
+              type="button"
+              onClick={() => void load({ forcePick: true })}
+              className="flex items-center gap-1.5 rounded-xl border border-cyan-200 bg-cyan-50 px-3 py-2 text-sm font-bold text-cyan-800 hover:bg-cyan-100 transition-all"
+            >
+              <Users size={15} />
+              <span className="hidden sm:inline">{locale === "ur" ? "بچہ بدلیں" : "Switch child"}</span>
+            </button>
+          )}
+          <button onClick={() => openSettings()}
+            className="flex items-center gap-1.5 rounded-xl border border-glacier-200 bg-glacier-50 px-3 py-2 text-sm font-bold text-glacier-700 hover:bg-glacier-100 transition-all"
           >
             <Settings size={15} />
             <span className="hidden sm:inline">{locale === "ur" ? "ترتیبات" : "Settings"}</span>
           </button>
-          <button onClick={logout} className="flex items-center gap-2 rounded-xl border border-glacier-200 bg-white/70 px-4 py-2 text-sm font-bold text-deep-soft hover:text-deep hover:bg-white transition-all">
+          <button onClick={logout} className="flex items-center gap-2 rounded-xl border border-glacier-200 bg-white/80 px-4 py-2 text-sm font-bold text-deep-soft hover:text-deep hover:bg-white transition-all">
             <LogOut size={16} /><span className="hidden sm:inline">{pd.logout}</span>
           </button>
         </div>
       </header>
 
-      <div className="max-w-2xl mx-auto px-4 pt-8 space-y-6">
+      <div className="relative max-w-2xl mx-auto px-4 pt-8 space-y-6">
 
         {/* ── Child hero ── */}
-        <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }}
-          className="rounded-3xl bg-gradient-to-br from-violet-600 to-purple-700 p-6 text-white shadow-xl"
+        <motion.div
+          initial={{ opacity: 0, y: 14 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.35 }}
+          className="relative overflow-hidden rounded-[1.75rem] bg-gradient-to-br from-glacier-600 via-glacier-500 to-deep p-6 text-white shadow-[0_22px_50px_-20px_rgba(2,132,199,0.55)]"
         >
-          <div className="flex items-center gap-4">
-            <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-white/20 text-4xl">🎒</div>
+          <div className="pointer-events-none absolute -right-10 -top-10 h-40 w-40 rounded-full bg-white/10" />
+          <div className="pointer-events-none absolute -left-8 bottom-0 h-28 w-28 rounded-full bg-cyan-300/20" />
+          <div className="relative flex items-center gap-4">
+            <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-white/20 text-4xl ring-2 ring-white/25">🎒</div>
             <div className="flex-1 min-w-0">
               <h1 className="font-display text-2xl font-extrabold leading-tight">{child.name}</h1>
-              <p className="text-violet-200 text-sm mt-0.5">{pd.grade} {child.grade} {pd.student}</p>
+              <p className="text-glacier-100 text-sm mt-0.5">
+                {pd.grade} {child.grade} {pd.student}
+                {data.relationship ? ` · ${relLabel(data.relationship)}` : ""}
+              </p>
               {improvementLabel && (
-                <div className={`flex items-center gap-1 mt-1.5 text-xs font-bold bg-white/10 rounded-full px-2.5 py-0.5 w-fit ${improvementLabel.cls}`}>
+                <div className={`flex items-center gap-1 mt-1.5 text-xs font-bold bg-white/15 rounded-full px-2.5 py-0.5 w-fit ${improvementLabel.cls}`}>
                   {improvementLabel.icon}{improvementLabel.text}
                 </div>
               )}
             </div>
-            <div className="flex flex-col items-center flex-shrink-0">
-              <div className="flex items-center gap-1 text-amber-300">
+            <div className="flex flex-col items-center flex-shrink-0 rounded-2xl bg-white/10 px-3 py-2">
+              <div className="flex items-center gap-1 text-amber-200">
                 <Star size={18} fill="currentColor" />
                 <span className="font-display text-xl font-extrabold">{child.stars}</span>
               </div>
-              <span className="text-xs text-violet-300">{pd.stars}</span>
+              <span className="text-xs text-glacier-100">{pd.stars}</span>
             </div>
           </div>
-          <div className="mt-5 grid grid-cols-4 gap-2">
+          <div className="relative mt-5 grid grid-cols-4 gap-2">
             {[
               { label: pd.quizzes,     value: analytics.total_attempts },
               { label: pd.accuracy,    value: `${Math.round(analytics.overall_accuracy ?? 0)}%` },
               { label: pd.streak,      value: `${analytics.streak_days}d` },
               { label: pd.consistency, value: `${data.consistency ?? 0}%` },
             ].map(s => (
-              <div key={s.label} className="rounded-2xl bg-white/10 py-3 text-center">
+              <div key={s.label} className="rounded-2xl bg-white/12 py-3 text-center ring-1 ring-white/15">
                 <div className="font-display text-lg font-extrabold">{s.value}</div>
-                <div className="text-[10px] text-violet-200 mt-0.5">{s.label}</div>
+                <div className="text-[10px] text-glacier-100 mt-0.5">{s.label}</div>
               </div>
             ))}
           </div>
@@ -509,26 +784,32 @@ export default function ParentDashboard() {
         {/* ── Key metric cards ── */}
         <div className="grid grid-cols-2 gap-3">
           <MetricCard icon={<BookOpen size={18} />} label={pd.chatSessions} value={data.total_chats}
-            sub={pd.chatSub} gradient="from-sky-500 to-cyan-500" />
+            sub={pd.chatSub} gradient="from-glacier-500 to-deep" />
           <MetricCard icon={<Brain size={18} />} label={pd.favSubject} value={data.favourite_subject}
-            sub={pd.favSub} gradient="from-emerald-500 to-teal-500" />
+            sub={pd.favSub} gradient="from-mint-300 to-glacier-500" />
           <MetricCard icon={<Timer size={18} />} label={pd.timeSpent} value={`${analytics.total_time_minutes ?? 0}m`}
             sub={pd.timeSub} gradient="from-amber-500 to-orange-500" />
           <MetricCard icon={<Target size={18} />} label={pd.questionsDone} value={analytics.total_questions ?? 0}
-            sub={`${totalCorrect} ${pd.answeredCorrectly}`} gradient="from-violet-500 to-purple-600" />
+            sub={`${totalCorrect} ${pd.answeredCorrectly}`} gradient="from-sky-600 to-blue-500" />
         </div>
 
         {/* ── AI Report ── */}
         <motion.button initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}
           whileHover={{ scale: 1.01 }} whileTap={{ scale: 0.98 }}
-          onClick={() => router.push("/parent/report")}
-          className="w-full flex items-center justify-between rounded-2xl bg-gradient-to-r from-violet-600 to-purple-600 px-6 py-4 text-white shadow-lg hover:shadow-xl transition-all"
+          onClick={() => {
+            const email = selectedEmail || child.email;
+            if (email) setSelectedChildEmail(email);
+            router.push("/parent/report");
+          }}
+          className="w-full flex items-center justify-between rounded-2xl bg-gradient-to-r from-glacier-600 to-deep px-6 py-4 text-white shadow-[0_14px_34px_-16px_rgba(2,132,199,0.7)] hover:shadow-xl transition-all"
         >
           <div className="flex items-center gap-3">
-            <Sparkles size={22} />
+            <span className="flex h-11 w-11 items-center justify-center rounded-xl bg-white/15">
+              <Sparkles size={22} />
+            </span>
             <div className="text-left">
               <div className="font-display font-extrabold text-lg leading-tight">{pd.aiReportBtn}</div>
-              <div className="text-xs text-violet-200">{pd.aiReportSub.replace("{name}", child.name)}</div>
+              <div className="text-xs text-glacier-100">{pd.aiReportSub.replace("{name}", child.name)}</div>
             </div>
           </div>
           <ChevronRight size={20} className="flex-shrink-0" />
@@ -605,6 +886,51 @@ export default function ParentDashboard() {
             <p className="text-deep-soft text-sm mt-1">{pd.emptySub.replace("{name}", child.name)}</p>
           </motion.div>
         )}
+
+        {/* Link another child */}
+        <div className="rounded-3xl bg-white/80 border border-glacier-100 shadow-soft p-5">
+          <button
+            type="button"
+            onClick={() => setShowAddChild((v) => !v)}
+            className="w-full flex items-center justify-between text-left"
+          >
+            <div>
+              <p className="font-display font-extrabold text-deep">
+                {locale === "ur" ? "دوسرا بچہ لنک کریں" : "Link another child"}
+              </p>
+              <p className="text-xs text-deep-soft mt-0.5">
+                {locale === "ur"
+                  ? "ایک parent اکاؤنٹ سے کئی بچے منسلک ہو سکتے ہیں۔"
+                  : "One parent account can stay linked to multiple children."}
+              </p>
+            </div>
+            <ChevronRight size={18} className={`text-glacier-600 transition-transform ${showAddChild ? "rotate-90" : ""}`} />
+          </button>
+          {showAddChild && (
+            <form
+              className="mt-4"
+              onSubmit={(e) => {
+                e.preventDefault();
+                if (!redeemBusy && inviteCode.trim().length >= 5) void redeem();
+              }}
+            >
+              <input
+                value={inviteCode}
+                onChange={(e) => setInviteCode(e.target.value.toUpperCase())}
+                placeholder="FAM-XXXXX"
+                className="w-full rounded-2xl border border-glacier-200 bg-glacier-50/40 px-4 py-3 text-center font-mono tracking-widest text-lg mb-3 outline-none focus:ring-4 focus:ring-glacier-200/60"
+              />
+              {redeemError && <p className="text-sm text-rose-600 mb-3">{redeemError}</p>}
+              <button
+                type="submit"
+                disabled={redeemBusy || inviteCode.trim().length < 5}
+                className="w-full rounded-full bg-gradient-to-r from-glacier-600 to-deep px-5 py-3 text-white font-bold disabled:opacity-50"
+              >
+                {redeemBusy ? "Checking…" : "Submit invitation code"}
+              </button>
+            </form>
+          )}
+        </div>
       </div>
 
     </main>

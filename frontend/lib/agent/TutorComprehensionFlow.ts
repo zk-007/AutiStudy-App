@@ -1,31 +1,17 @@
 /**
- * TutorComprehensionFlow — popup-gated adaptation ladder state.
+ * TutorComprehensionFlow — thumbs 👍/👎 + choice-based teaching modalities (Gap 7).
  */
 
-export type FlowPhase = "idle" | "popup" | "breathing" | "mcq";
+import type { TeachingModality } from "@/lib/agent/teachingModalities";
+
+export type FlowPhase = "idle" | "feedback" | "breathing" | "mcq";
 
 export type AdaptationRound = 0 | 1 | 2 | 3 | 4 | 5;
 
-export type PopupGate = "none" | "scroll" | "tts" | "image";
+/** Gate before thumbs appear (TTS / image must finish first). */
+export type ContentGate = "none" | "tts" | "image";
 
-export const POPUP_WAIT_MS = 60_000;
-export const TEXT_READ_MS = 30_000; // 30 seconds to read text answers
-export const IMAGE_VIEW_MS = 60_000; // 1 minute to study an image
-
-export const POPUP_PROMPTS = [
-  "Did you get it? 😊",
-  "Quick check — does that make sense? 🌟",
-  "Are you good with that? Tap yes or not yet! ✨",
-  "Just checking in — got it? 👍",
-];
-
-/** Shown when CV detects a smile / happy face during the popup wait. */
-export const HAPPY_POPUP_PROMPTS = [
-  "You look like you understood! Did you get it? 😊",
-  "I can see you're getting it — tap Yes if you're ready! 🌟",
-  "Nice smile! Looks like that made sense — got it? ✨",
-  "You seem happy with that — want to move on? Tap Yes! 👍",
-];
+export const IMAGE_VIEW_MS = 60_000;
 
 /** Shown when all help steps are used (including after the breathing exercise). */
 export const LADDER_EXHAUSTED_MESSAGE =
@@ -41,14 +27,11 @@ export interface StepMcq {
 
 export interface FlowSnapshot {
   phase: FlowPhase;
+  showFeedbackBar: boolean;
+  /** @deprecated use showFeedbackBar — kept so older UI checks still compile during migration */
   showPopup: boolean;
-  pendingPopup: boolean;
-  popupGate: PopupGate;
-  popupDancing: boolean;
+  awaitingContentGate: ContentGate;
   cvHappyMode: boolean;
-  typingBlocked: boolean;
-  popupPromptIndex: number;
-  happyPromptIndex: number;
   adaptationRound: AdaptationRound;
   adaptationStepsTaken: number;
   blockInput: boolean;
@@ -59,24 +42,28 @@ export interface FlowSnapshot {
   mcqQuestions: StepMcq[];
   mcqIndex: number;
   cvPaused: boolean;
-  popupElapsedMs: number;
+  feedbackElapsedMs: number;
   contentDeliveredAt: number;
   lastAdaptationContent: string;
+  showModalityChoice: boolean;
+  /** Shown after 👍/👎 timeout when CV reads happy — invite next question. */
+  showCvHappyFollowUp: boolean;
+  /** Modality picker opened from CV timeout (custom prompt). */
+  cvModalityChoiceFromTimeout: boolean;
+  triedModalities: TeachingModality[];
+  currentModality: TeachingModality | null;
 }
 
 export class TutorComprehensionFlow {
   phase: FlowPhase = "idle";
-  showPopup = false;
-  pendingPopup = false;
-  popupGate: PopupGate = "none";
-  popupDancing = false;
+  showFeedbackBar = false;
+  awaitingContentGate: ContentGate = "none";
   cvHappyMode = false;
-  typingBlocked = false;
-  popupPromptIndex = 0;
-  happyPromptIndex = 0;
   adaptationRound: AdaptationRound = 0;
   adaptationStepsTaken = 0;
   adaptationOrder: AdaptationRound[] = [1, 2, 3, 4, 5];
+  /** Gap 7 — modalities already shown this question (skip on 👎). */
+  triedRounds = new Set<AdaptationRound>();
   blockInput = false;
   showBreathing = false;
   imageViewActive = false;
@@ -85,21 +72,26 @@ export class TutorComprehensionFlow {
   mcqQuestions: StepMcq[] = [];
   mcqIndex = 0;
   cvPaused = false;
-  popupStartedAt = 0;
+  feedbackStartedAt = 0;
   contentDeliveredAt = 0;
   lastAdaptationContent = "";
+  showModalityChoice = false;
+  showCvHappyFollowUp = false;
+  cvModalityChoiceFromTimeout = false;
+  triedModalitiesSet = new Set<TeachingModality>();
+  currentModality: TeachingModality | null = null;
+
+  get triedModalities(): TeachingModality[] {
+    return [...this.triedModalitiesSet];
+  }
 
   snapshot(): FlowSnapshot {
     return {
       phase: this.phase,
-      showPopup: this.showPopup,
-      pendingPopup: this.pendingPopup,
-      popupGate: this.popupGate,
-      popupDancing: this.popupDancing,
+      showFeedbackBar: this.showFeedbackBar,
+      showPopup: this.showFeedbackBar,
+      awaitingContentGate: this.awaitingContentGate,
       cvHappyMode: this.cvHappyMode,
-      typingBlocked: this.typingBlocked,
-      popupPromptIndex: this.popupPromptIndex,
-      happyPromptIndex: this.happyPromptIndex,
       adaptationRound: this.adaptationRound,
       adaptationStepsTaken: this.adaptationStepsTaken,
       blockInput: this.blockInput,
@@ -110,13 +102,22 @@ export class TutorComprehensionFlow {
       mcqQuestions: this.mcqQuestions,
       mcqIndex: this.mcqIndex,
       cvPaused: this.cvPaused,
-      popupElapsedMs: this.popupStartedAt ? Date.now() - this.popupStartedAt : 0,
+      feedbackElapsedMs: this.feedbackStartedAt ? Date.now() - this.feedbackStartedAt : 0,
       contentDeliveredAt: this.contentDeliveredAt,
       lastAdaptationContent: this.lastAdaptationContent,
+      showModalityChoice: this.showModalityChoice,
+      showCvHappyFollowUp: this.showCvHappyFollowUp,
+      cvModalityChoiceFromTimeout: this.cvModalityChoiceFromTimeout,
+      triedModalities: this.triedModalities,
+      currentModality: this.currentModality,
     };
   }
 
-  /** Set personalized help-ladder order for this student (from agent memory). */
+  clearCvFollowUp() {
+    this.showCvHappyFollowUp = false;
+    this.cvModalityChoiceFromTimeout = false;
+  }
+
   setAdaptationOrder(order: AdaptationRound[]) {
     const valid = order.filter((n) => n >= 1 && n <= 5);
     const seen = new Set<AdaptationRound>();
@@ -133,51 +134,98 @@ export class TutorComprehensionFlow {
     this.adaptationOrder = merged.length ? merged : [1, 2, 3, 4, 5];
   }
 
-  /** Content delivered — wait for gate before showing popup / starting 1-min CV. */
-  onContentDelivered(gate: PopupGate) {
-    if (this.mcqActive) return;
-    this.pendingPopup = true;
-    this.popupGate = gate;
-    this.showPopup = false;
-    this.popupDancing = false;
-    this.cvHappyMode = false;
-    this.typingBlocked = false;
-    this.blockInput = false;
-    this.popupStartedAt = 0;
-    this.contentDeliveredAt = Date.now();
+  markModalityTried(m: TeachingModality) {
+    this.triedModalitiesSet.add(m);
+    this.currentModality = m;
+  }
+
+  openModalityChoice(fromTimeout = false) {
+    this.showFeedbackBar = false;
+    this.showCvHappyFollowUp = false;
+    this.showModalityChoice = true;
+    this.cvModalityChoiceFromTimeout = fromTimeout;
+    this.feedbackStartedAt = 0;
+  }
+
+  closeModalityChoice() {
+    this.showModalityChoice = false;
+    this.cvModalityChoiceFromTimeout = false;
+  }
+
+  openCvHappyFollowUp() {
+    this.showFeedbackBar = false;
+    this.showModalityChoice = false;
+    this.cvModalityChoiceFromTimeout = false;
+    this.showCvHappyFollowUp = true;
     this.phase = "idle";
+    this.feedbackStartedAt = 0;
   }
 
-  /** Show popup and start the 1-minute CV window. */
-  activatePopup() {
+  openCvDistressedFollowUp() {
+    this.openModalityChoice(true);
+  }
+
+  dismissForNextQuestion() {
+    this.showModalityChoice = false;
+    this.clearCvFollowUp();
+    this.showFeedbackBar = false;
+    this.phase = "idle";
+    this.adaptationRound = 0;
+    this.adaptationStepsTaken = 0;
+    this.triedModalitiesSet.clear();
+    this.currentModality = null;
+    this.showBreathing = false;
+    this.cvPaused = false;
+  }
+
+  /** Text answer delivered — show 👍/👎 immediately (doc: no scroll/popup gate). */
+  onContentDelivered(gate: "scroll" | ContentGate = "scroll") {
     if (this.mcqActive) return;
-    this.pendingPopup = false;
-    this.popupGate = "none";
-    this.phase = "popup";
-    this.showPopup = true;
-    this.popupDancing = false;
-    this.cvHappyMode = false;
-    this.typingBlocked = false;
-    this.blockInput = true;
-    this.popupStartedAt = Date.now();
+    this.contentDeliveredAt = Date.now();
+    this.awaitingContentGate = gate === "scroll" ? "none" : gate;
+    if (gate === "scroll") {
+      this.activateFeedbackBar();
+    } else {
+      this.showFeedbackBar = false;
+      this.phase = "idle";
+      this.feedbackStartedAt = 0;
+    }
   }
 
-  /** @deprecated use onContentDelivered('scroll') */
+  /** Show non-blocking 👍/👎 bar (never blocks typing). */
+  activateFeedbackBar() {
+    if (this.mcqActive) return;
+    this.awaitingContentGate = "none";
+    this.phase = "feedback";
+    this.showFeedbackBar = true;
+    this.cvHappyMode = false;
+    this.blockInput = false;
+    this.feedbackStartedAt = Date.now();
+  }
+
+  dismissFeedbackBar() {
+    this.showFeedbackBar = false;
+    this.phase = "idle";
+    this.cvHappyMode = false;
+    this.feedbackStartedAt = 0;
+  }
+
   onAssistantAnswer() {
     this.onContentDelivered("scroll");
   }
 
-  /** Student sent a new question — full reset. */
   onStudentQuestion() {
     this.phase = "idle";
-    this.showPopup = false;
-    this.pendingPopup = false;
-    this.popupGate = "none";
-    this.popupDancing = false;
+    this.showFeedbackBar = false;
+    this.awaitingContentGate = "none";
     this.cvHappyMode = false;
-    this.typingBlocked = false;
     this.adaptationRound = 0;
     this.adaptationStepsTaken = 0;
+    this.triedRounds.clear();
+    this.triedModalitiesSet.clear();
+    this.currentModality = null;
+    this.showModalityChoice = false;
+    this.clearCvFollowUp();
     this.blockInput = false;
     this.showBreathing = false;
     this.imageViewActive = false;
@@ -186,58 +234,40 @@ export class TutorComprehensionFlow {
     this.mcqQuestions = [];
     this.mcqIndex = 0;
     this.cvPaused = false;
-    this.popupStartedAt = 0;
+    this.feedbackStartedAt = 0;
     this.lastAdaptationContent = "";
   }
 
   onAttemptSendWhileBlocked() {
-    if (this.showPopup) {
-      this.typingBlocked = true;
-      this.popupDancing = true;
-      return true;
-    }
-    if (this.mcqActive || this.showBreathing) return true;
+    if (this.mcqActive || this.showBreathing || this.imageViewActive) return true;
     return this.blockInput;
   }
 
-  /** Smile / happy CV — dance popup and show encouraging “you understood” prompts. */
-  onCvHappyDuringWait() {
-    if (this.phase !== "popup" || !this.showPopup) return;
+  onCvHappyDuringFeedback() {
+    if (this.phase !== "feedback" || !this.showFeedbackBar) return;
     this.cvHappyMode = true;
-    this.popupDancing = true;
-    this.happyPromptIndex = (this.happyPromptIndex + 1) % HAPPY_POPUP_PROMPTS.length;
   }
 
-  clearPopupEffects() {
-    this.popupDancing = false;
-    this.typingBlocked = false;
-  }
-
-  /** Popup Yes clicked — normal close (use closePopupForCelebrationQuiz when quiz follows). */
-  onPopupYes(pauseCv: boolean) {
-    this.showPopup = false;
-    this.pendingPopup = false;
-    this.popupGate = "none";
-    this.popupDancing = false;
+  /** 👍 — student understood; unlock chat for next question. */
+  onThumbsUp(pauseCv: boolean) {
+    this.showFeedbackBar = false;
+    this.showModalityChoice = false;
+    this.clearCvFollowUp();
+    this.awaitingContentGate = "none";
     this.cvHappyMode = false;
-    this.typingBlocked = false;
     this.blockInput = false;
     this.phase = "idle";
-    this.popupStartedAt = 0;
+    this.feedbackStartedAt = 0;
     this.adaptationRound = 0;
     this.adaptationStepsTaken = 0;
     if (pauseCv) this.cvPaused = true;
   }
 
-  /** Yes at step 4+ — close popup but keep input blocked for celebration quiz. */
-  closePopupForCelebrationQuiz() {
-    this.showPopup = false;
-    this.pendingPopup = false;
-    this.popupGate = "none";
-    this.popupDancing = false;
+  closeFeedbackForCelebrationQuiz() {
+    this.showFeedbackBar = false;
+    this.awaitingContentGate = "none";
     this.cvHappyMode = false;
-    this.typingBlocked = false;
-    this.popupStartedAt = 0;
+    this.feedbackStartedAt = 0;
     this.cvPaused = true;
   }
 
@@ -253,73 +283,71 @@ export class TutorComprehensionFlow {
     this.cvPaused = true;
   }
 
-  /** Popup No or auto-adapt — returns next round to run. */
+  /** 👎 or camera-driven adapt — returns next untried ladder round. */
   onNeedAdaptation(): AdaptationRound | null {
-    if (this.adaptationStepsTaken >= this.adaptationOrder.length) return null;
-    const round = this.adaptationOrder[this.adaptationStepsTaken];
-    this.adaptationStepsTaken += 1;
-    this.adaptationRound = round;
-    this.showPopup = false;
-    this.pendingPopup = false;
-    this.popupGate = "none";
-    this.popupDancing = false;
-    this.typingBlocked = false;
-    this.popupStartedAt = 0;
-    return round;
+    for (const round of this.adaptationOrder) {
+      if (this.triedRounds.has(round)) continue;
+      this.triedRounds.add(round);
+      this.adaptationStepsTaken = this.triedRounds.size;
+      this.adaptationRound = round;
+      this.showFeedbackBar = false;
+      this.awaitingContentGate = "none";
+      this.cvHappyMode = false;
+      this.feedbackStartedAt = 0;
+      return round;
+    }
+    return null;
   }
 
   onAdaptationContent(content: string) {
     this.lastAdaptationContent = content;
   }
 
-  /** All 5 help steps used — unlock chat and reset popup state. */
   onLadderExhausted() {
-    this.showPopup = false;
-    this.pendingPopup = false;
-    this.popupGate = "none";
-    this.popupDancing = false;
-    this.typingBlocked = false;
+    this.showFeedbackBar = false;
+    this.awaitingContentGate = "none";
+    this.cvHappyMode = false;
     this.blockInput = false;
     this.showBreathing = false;
     this.imageViewActive = false;
     this.mcqActive = false;
     this.mcqPhase = "recall";
     this.phase = "idle";
-    this.popupStartedAt = 0;
+    this.feedbackStartedAt = 0;
     this.adaptationRound = 0;
     this.adaptationStepsTaken = 0;
+    this.triedRounds.clear();
     this.cvPaused = false;
   }
-  onAdaptationComplete(gate: PopupGate = "scroll") {
+
+  onAdaptationComplete(gate: "scroll" | ContentGate = "scroll") {
     if (this.mcqActive || this.showBreathing) return;
     this.onContentDelivered(gate);
   }
 
   onBreathingStart() {
     this.showBreathing = true;
-    this.showPopup = false;
+    this.showFeedbackBar = false;
     this.blockInput = true;
     this.phase = "breathing";
   }
 
   onBreathingComplete() {
     this.showBreathing = false;
-    // After breathing (round 5), skip another popup — unlock chat with the
-    // gentle “we tried lots of ways” message instead.
     this.onLadderExhausted();
   }
 
   onImageViewStart() {
     this.imageViewActive = true;
-    this.pendingPopup = false;
-    this.popupGate = "none";
-    this.showPopup = false;
+    this.awaitingContentGate = "image";
+    this.showFeedbackBar = false;
     this.blockInput = true;
     this.contentDeliveredAt = Date.now();
   }
 
   onImageViewEnd() {
     this.imageViewActive = false;
+    this.blockInput = false;
   }
 
   onMcqsLoaded(questions: StepMcq[], phase: "recall" | "teaching" | "appreciation" = "recall") {
@@ -327,7 +355,7 @@ export class TutorComprehensionFlow {
     this.mcqIndex = 0;
     this.mcqPhase = phase;
     this.mcqActive = questions.length > 0;
-    this.showPopup = false;
+    this.showFeedbackBar = false;
     this.blockInput = true;
     this.phase = "mcq";
   }
@@ -349,14 +377,10 @@ export class TutorComprehensionFlow {
       this.mcqActive = false;
       this.mcqQuestions = [];
       this.mcqIndex = 0;
-      this.activatePopup();
+      this.blockInput = false;
+      this.activateFeedbackBar();
       return "done";
     }
     return "next";
-  }
-
-  popupTimedOut(): boolean {
-    if (!this.popupStartedAt || !this.showPopup) return false;
-    return Date.now() - this.popupStartedAt >= POPUP_WAIT_MS;
   }
 }

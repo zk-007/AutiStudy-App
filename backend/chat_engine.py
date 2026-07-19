@@ -203,6 +203,27 @@ _FORMAT_INSTRUCTIONS = {
         "in the student's mind. Describe what it looks like, sounds like, or feels like."
     ),
     "normal": "",
+    "simple_text_only": (
+        "\n\nIMPORTANT: Reply with PLAIN simple text ONLY.\n"
+        "Use 3–6 short, easy sentences in one short paragraph.\n"
+        "Do NOT use numbered steps, bullet lists, arrow flowcharts (→), "
+        "or lines like 'Step 1'. No 'Let's break this down' headers.\n"
+        "Do NOT end with 'Read this part first', 'tell me more', or any "
+        "instruction to ask for more — give the full short answer in one go."
+    ),
+    "step_by_step_only": (
+        "\n\nIMPORTANT: This is a FRESH answer — reply in STEP-BY-STEP format ONLY.\n"
+        "Do NOT write a plain summary paragraph first.\n\n"
+        "Required structure (follow exactly):\n"
+        "1) Opening (1 sentence): warm, e.g. \"Let's break this down simply! 🪜\"\n"
+        "2) Concept flowchart — 2–4 lines using REAL words from the topic:\n"
+        "   Each line: Word → next idea → next idea (add 1 emoji at the end)\n"
+        "   NEVER write 'Step 1 → Step 2 → Step 3' — use the actual concepts.\n"
+        "3) Emoji example (2 lines) from the topic.\n\n"
+        "Rules: steps/flow lines ONLY — no plain paragraph before the arrows. "
+        "Do NOT end with 'Read this part first', 'tell me more', or any "
+        "instruction to ask for more."
+    ),
 }
 
 
@@ -532,7 +553,7 @@ def generate_image(
     return None
 
 
-def generate_speech_b64(text: str, language: str = "en") -> Optional[str]:
+def generate_speech_b64(text: str, language: str = "en", voice: Optional[str] = None) -> Optional[str]:
     """
     Produce a base64-encoded MP3 of `text` using OpenAI TTS.
     Returns None if TTS isn't available.
@@ -541,7 +562,7 @@ def generate_speech_b64(text: str, language: str = "en") -> Optional[str]:
     if not _have_key or _llm_module is None:
         return None
     try:
-        return _llm_module.text_to_speech_base64(text=text, language=language)
+        return _llm_module.text_to_speech_base64(text=text, language=language, voice=voice)
     except Exception as err:
         print(f"[chat_engine] text_to_speech failed: {err}")
         return None

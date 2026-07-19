@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { motion } from "framer-motion";
 import { useLocale } from "@/lib/i18n/LocaleProvider";
@@ -31,7 +31,7 @@ export function Features() {
           <h2 className="font-display text-3xl md:text-5xl font-extrabold tracking-tight text-deep">
             {t.features.heading}
           </h2>
-          <p className="mt-4 text-lg text-deep-soft">{t.features.sub}</p>
+          <p className="mt-4 text-lg text-deep-soft leading-relaxed">{t.features.sub}</p>
         </motion.div>
 
         <div className="mt-14 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">

@@ -437,7 +437,15 @@ export function useAdaptiveTutorAgent({
     if (videoRef.current) videoRef.current.srcObject = null;
     bufferRef.current.clear();
     hybridEngineRef.current.clear();
-    setState((p) => ({ ...p, cameraEnabled: false, videoLive: false }));
+    // Clear the last-known expression too — otherwise a stale reading from
+    // before the camera was turned off could get attached to a later
+    // Got it/Not yet as if it were the student's current expression.
+    setState((p) => ({
+      ...p,
+      cameraEnabled: false,
+      videoLive: false,
+      teachingEmotion: null,
+    }));
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 

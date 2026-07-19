@@ -1,6 +1,7 @@
 import type { Config } from "tailwindcss";
 
 const config: Config = {
+  darkMode: "class",
   content: [
     "./pages/**/*.{js,ts,jsx,tsx,mdx}",
     "./components/**/*.{js,ts,jsx,tsx,mdx}",
@@ -11,30 +12,31 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
-        // Icy / glacier palette - calming, autism-friendly
+        // Palette driven by CSS variables so Light/Dark can remap globally
         glacier: {
-          50: "#F7FBFC",
-          100: "#E8F4F8",
-          200: "#DCEEF5",
-          300: "#BEE3F8",
-          400: "#9AD0EC",
-          500: "#7FB3D5",
-          600: "#5B91B8",
-          700: "#3F6F92",
+          50: "rgb(var(--glacier-50) / <alpha-value>)",
+          100: "rgb(var(--glacier-100) / <alpha-value>)",
+          200: "rgb(var(--glacier-200) / <alpha-value>)",
+          300: "rgb(var(--glacier-300) / <alpha-value>)",
+          400: "rgb(var(--glacier-400) / <alpha-value>)",
+          500: "rgb(var(--glacier-500) / <alpha-value>)",
+          600: "rgb(var(--glacier-600) / <alpha-value>)",
+          700: "rgb(var(--glacier-700) / <alpha-value>)",
         },
         mint: {
-          100: "#EAF5F2",
-          200: "#DCEEE9",
-          300: "#C8E6E0",
-          400: "#A8D5CC",
+          100: "rgb(var(--mint-100) / <alpha-value>)",
+          200: "rgb(var(--mint-200) / <alpha-value>)",
+          300: "rgb(var(--mint-300) / <alpha-value>)",
+          400: "rgb(var(--mint-400) / <alpha-value>)",
         },
         deep: {
-          DEFAULT: "#0F2D4A",
-          soft: "#234567",
-          muted: "#5A7A95",
+          DEFAULT: "rgb(var(--deep) / <alpha-value>)",
+          soft: "rgb(var(--deep-soft) / <alpha-value>)",
+          muted: "rgb(var(--deep-muted) / <alpha-value>)",
         },
-        background: "#F7FBFC",
-        foreground: "#0F2D4A",
+        background: "rgb(var(--app-bg) / <alpha-value>)",
+        foreground: "rgb(var(--deep) / <alpha-value>)",
+        surface: "rgb(var(--surface) / <alpha-value>)",
       },
       fontFamily: {
         display: ["var(--font-quicksand)", "system-ui", "sans-serif"],
@@ -42,8 +44,12 @@ const config: Config = {
       },
       boxShadow: {
         glow: "0 0 40px rgba(190, 227, 248, 0.6)",
-        soft: "0 10px 40px rgba(15, 45, 74, 0.08)",
-        deep: "0 20px 60px rgba(15, 45, 74, 0.12)",
+        soft: "var(--shadow-soft)",
+        deep: "var(--shadow-deep)",
+        cute: "var(--shadow-soft)",
+      },
+      borderRadius: {
+        "4xl": "2rem",
       },
       animation: {
         "drift-bg": "drift 20s ease-in-out infinite",

@@ -25,10 +25,12 @@ Key design decisions:
 from __future__ import annotations
 
 import os
+import random
 import sys
 import io
+from datetime import date, timedelta
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Tuple
 
 # JSON stores (data/, quiz_data/, etc.) use paths relative to the AutiStudy
 # project root. npm run dev:api launches uvicorn from AutiStudy-React, so
@@ -58,14 +60,51 @@ from pydantic import BaseModel
 sys.path.insert(0, str(_ROOT))
 
 # Shared data layer — same JSON stores the React app reads/writes.
-from utils.session import create_session, delete_session, get_session  # noqa: E402
+from utils.session import create_session, delete_session, get_session, load_sessions, save_sessions  # noqa: E402
 from utils.auth import (  # noqa: E402
     hash_password, load_users, save_users,
     verify_password, migrate_password_if_needed,
 )
 from utils.parent_db import (  # noqa: E402
-    create_parent, get_parent, load_parents, parent_exists,
-    save_parents, strip_password as parent_strip_pw,
+    add_linked_child,
+    clear_all_children,
+    create_parent,
+    delete_parent,
+    get_parent,
+    get_parent_children,
+    load_parents,
+    normalize_relationship,
+    parent_exists,
+    parent_has_child,
+    remove_linked_child,
+    save_parents,
+    strip_password as parent_strip_pw,
+    update_parent,
+)
+from utils.email_otp import (  # noqa: E402
+    SUPPORT_INBOX,
+    consume_password_reset_grant,
+    create_and_send_otp,
+    issue_password_reset_grant,
+    send_contact_form_email,
+    send_family_invite_email,
+    send_parent_link_request_email,
+    verify_otp,
+)
+from utils.family_invite import (  # noqa: E402
+    approve_invite,
+    cancel_invite,
+    clear_parent_links,
+    create_invite,
+    get_link_status_for_child,
+    get_pending_for_child,
+    list_child_invites,
+    redeem_invite,
+    reissue_approve_token,
+    reject_invite,
+    respond_with_approve_token,
+    slots_for_child,
+    unlink_parent_from_child,
 )
 from utils.quiz_db import get_quiz_history, get_user_analytics  # noqa: E402
 from utils.chat_db import (  # noqa: E402
@@ -92,11 +131,30 @@ from utils.teaching_agent import (  # noqa: E402
 )
 from utils.media_agent import run_media_agent, decide_from_emotion  # noqa: E402
 from utils.agent_memory import (  # noqa: E402
+    REVISION_ACTIVITIES,
+    evaluate_revision_need,
     get_adaptation_ladder_order,
+    get_current_preferred_modality,
+    get_learner_profile,
+    get_memory_context,
     get_memory_summary,
+    record_adaptation_failure,
     record_adaptation_preference,
+    save_learner_profile,
+    update_audio_preference,
     record_session_summary as memory_record_session,
 )
+from utils.dashboard_extras import (  # noqa: E402
+    VALID_MOODS,
+    compute_journey,
+    get_mood_today,
+    get_schedule_for_day,
+    merge_activity_dates,
+    save_mood,
+    set_schedule_for_day,
+    toggle_schedule_item,
+)
+from utils.contact_store import save_contact_message  # noqa: E402
 
 # Where utils/llm._save_b64_image_to_temp drops generated images. Mounted
 # below so the React app can display them via /api/generated-images/<file>.
@@ -129,6 +187,7 @@ app.add_middleware(
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+    expose_headers=["Retry-After"],
 )
 
 # ── Startup pre-warm ─────────────────────────────────────────────────────────
@@ -266,7 +325,35 @@ class LoginReq(BaseModel):
 class AuthResponse(BaseModel):
     token: str
     user: dict
-    family_code: Optional[str] = None
+    family_code: Optional[str] = None  # legacy; unused in V6 invite flow
+
+
+class SignupPendingResponse(BaseModel):
+    ok: bool
+    email: str
+    detail: str
+    expires_in_sec: Optional[int] = None
+    retry_after_sec: Optional[int] = None
+    dev_mode: bool = False
+    dev_otp: Optional[str] = None
+
+
+def _otp_send_http_error(sent: dict) -> HTTPException:
+    """Map OTP send failure to 429 (rate limit) or 400, with Retry-After when known."""
+    retry = sent.get("retry_after_sec")
+    status = 429 if retry is not None else 400
+    headers = {"Retry-After": str(int(retry))} if retry is not None else None
+    return HTTPException(
+        status_code=status,
+        detail=sent.get("detail", "Could not send code."),
+        headers=headers,
+    )
+
+
+class VerifyEmailReq(BaseModel):
+    email: str
+    code: str
+    role: str  # "child" | "parent"
 
 
 class ChildSignupReq(BaseModel):
@@ -274,9 +361,6 @@ class ChildSignupReq(BaseModel):
     email: str
     password: str
     grade: int = 4
-    cnic: str
-    parent_name: str
-    parent_cnic: str
 
 
 class CreateChatReq(BaseModel):
@@ -289,9 +373,13 @@ class SendMessageReq(BaseModel):
     preferred_format: str = "normal"  # from agent: normal|simplified|step_by_step_flowchart|with_visual_description
 
 
+VALID_TTS_VOICES = {"alloy", "echo", "fable", "onyx", "nova", "shimmer"}
+
+
 class SpeechReq(BaseModel):
     text: str
     language: str = "en"
+    voice: Optional[str] = None
 
 
 class VisualAidReq(BaseModel):
@@ -372,16 +460,89 @@ def health():
 
 
 # ──────────────────────────────────────────────────────────────────────────────
+# Contact (Part B #6) — public form; emailed to support + saved to JSON
+# ──────────────────────────────────────────────────────────────────────────────
+
+VALID_CONTACT_ROLES = {"student", "parent", "teacher", "other"}
+
+
+class ContactReq(BaseModel):
+    name: str
+    email: str
+    role: str = "other"
+    subject: str
+    message: str
+
+
+@app.post("/api/contact")
+def submit_contact(req: ContactReq):
+    """
+    Contact form: email the message to supportAutistudy@gmail.com and
+    keep a local copy in data/contact_messages.json.
+    """
+    name = (req.name or "").strip()
+    email = (req.email or "").strip().lower()
+    subject = (req.subject or "").strip()
+    message = (req.message or "").strip()
+    role = (req.role or "other").strip().lower()
+
+    if len(name) < 2:
+        raise HTTPException(400, "Please enter your name.")
+    if "@" not in email or "." not in email.split("@")[-1]:
+        raise HTTPException(400, "Please enter a valid email address.")
+    if len(subject) < 2:
+        raise HTTPException(400, "Please enter a short subject.")
+    if len(message) < 10:
+        raise HTTPException(400, "Please write a bit more in your message.")
+    if len(message) > 4000:
+        raise HTTPException(400, "Message is too long (max 4000 characters).")
+    if role not in VALID_CONTACT_ROLES:
+        role = "other"
+
+    sent_ok, sent_detail = send_contact_form_email(
+        name=name[:80],
+        from_email=email[:120],
+        role=role,
+        subject=subject[:120],
+        message=message,
+    )
+    if not sent_ok:
+        raise HTTPException(
+            503,
+            sent_detail
+            or "Could not deliver your message to support. Please try again in a moment.",
+        )
+
+    entry = save_contact_message(
+        name=name[:80],
+        email=email[:120],
+        role=role,
+        subject=subject[:120],
+        message=message,
+        email_sent=True,
+        emailed_to=SUPPORT_INBOX,
+    )
+    return {
+        "ok": True,
+        "id": entry["id"],
+        "detail": (
+            f"Message sent to {SUPPORT_INBOX}. "
+            "Thank you — the AutiStudy team will get back to you."
+        ),
+        "emailed_to": SUPPORT_INBOX,
+    }
+
+
+# ──────────────────────────────────────────────────────────────────────────────
 # Auth endpoints
 # ──────────────────────────────────────────────────────────────────────────────
 
 @app.post("/api/auth/register", response_model=AuthResponse)
 def register(req: RegisterReq):
-    """Legacy endpoint — all students must sign up via /api/auth/child/signup with CNIC."""
+    """Legacy endpoint — use /api/auth/child/signup."""
     raise HTTPException(
         400,
-        "Student signup requires CNIC and parent details. "
-        "Please use the signup page (child account form).",
+        "Please use the student or parent signup form.",
     )
 
 
@@ -393,7 +554,13 @@ def login(req: LoginReq):
     if not user or not verify_password(req.password, user.get("password", "")):
         raise HTTPException(401, "Invalid email or password.")
 
-    # Silently upgrade SHA-256 legacy hashes to bcrypt on login
+    # V6: block login until email verified (legacy accounts without the flag stay allowed)
+    if user.get("email_verified") is False:
+        raise HTTPException(
+            403,
+            "Please verify your email before logging in. Check your inbox for the code.",
+        )
+
     migrate_password_if_needed(email, req.password, users)
 
     safe_user = _strip_password(user)
@@ -412,19 +579,11 @@ def me(current=Depends(get_current_user)):
     return _strip_password(current["user"])
 
 
-# ── Child signup (family code linking) ───────────────────────────────────────
+# ── V6: Child signup + email OTP ─────────────────────────────────────────────
 
-@app.post("/api/auth/child/signup", response_model=AuthResponse)
+@app.post("/api/auth/child/signup", response_model=SignupPendingResponse)
 def child_signup(req: ChildSignupReq):
-    """Register a student account with parent details for later family linking."""
-    from utils.family_link import (
-        find_student_by_identity,
-        generate_family_code,
-        student_id_from_cnic,
-        student_signup_conflict,
-        validate_cnic,
-    )
-
+    """Create an unverified student account and email a 6-digit OTP."""
     email = req.email.strip().lower()
     _validate_email(email)
     pw_err = _validate_password(req.password)
@@ -432,42 +591,20 @@ def child_signup(req: ChildSignupReq):
         raise HTTPException(400, pw_err)
     if req.grade not in GRADE_SUBJECTS:
         raise HTTPException(400, "Grade must be between 4 and 7.")
+    if len((req.name or "").strip()) < 2:
+        raise HTTPException(400, "Please enter your name.")
 
-    parent_name = req.parent_name.strip()
-    if not parent_name:
-        raise HTTPException(400, "Please enter your parent or guardian's name.")
-
-    try:
-        child_cnic_fmt = validate_cnic(req.cnic, "Student CNIC")
-        parent_cnic_fmt = validate_cnic(req.parent_cnic, "Parent CNIC")
-    except ValueError as exc:
-        raise HTTPException(400, str(exc))
+    if parent_exists(email):
+        raise HTTPException(
+            400,
+            "This email is already used by a parent account. "
+            "Parent and child must use different emails.",
+        )
 
     users = load_users()
-    if email in users:
-        raise HTTPException(400, "An account with this email already exists.")
-
-    conflict = student_signup_conflict(
-        users,
-        student_name=req.name,
-        student_cnic=child_cnic_fmt,
-        parent_name=parent_name,
-        parent_cnic=parent_cnic_fmt,
-    )
-    if conflict:
-        raise HTTPException(400, conflict)
-
-    student_id = student_id_from_cnic(child_cnic_fmt)
-
-    existing_codes = {
-        u.get("family_code")
-        for u in users.values()
-        if u.get("family_code")
-    }
-    try:
-        family_code = generate_family_code(existing_codes)
-    except RuntimeError:
-        raise HTTPException(500, "Could not generate a family code. Please try again.")
+    existing = users.get(email)
+    if existing and existing.get("email_verified") is not False:
+        raise HTTPException(400, "An account with this email already exists. Please log in.")
 
     users[email] = {
         "name": req.name.strip() or "Student",
@@ -478,17 +615,258 @@ def child_signup(req: ChildSignupReq):
         "stars": 0,
         "badges": [],
         "progress": {},
-        "student_id": student_id,
-        "cnic": child_cnic_fmt,
-        "parent_name": parent_name,
-        "parent_cnic": parent_cnic_fmt,
-        "family_code": family_code,
+        "email_verified": False,
+        "avatar": random.choice(sorted(VALID_AVATARS)),
     }
     save_users(users)
 
-    safe_user = _strip_password(users[email])
-    token = create_session(email, safe_user, current_page="dashboard", language="en")
-    return {"token": token, "user": safe_user, "family_code": family_code}
+    sent = create_and_send_otp(role="child", email=email, purpose="signup")
+    if not sent.get("ok"):
+        raise _otp_send_http_error(sent)
+
+    return {
+        "ok": True,
+        "email": email,
+        "detail": sent.get("detail", "Verification code sent."),
+        "expires_in_sec": sent.get("expires_in_sec"),
+        "retry_after_sec": sent.get("retry_after_sec"),
+        "dev_mode": bool(sent.get("dev_mode")),
+        "dev_otp": sent.get("dev_otp"),
+    }
+
+
+@app.post("/api/auth/verify-email", response_model=AuthResponse)
+def verify_email(req: VerifyEmailReq):
+    """Verify OTP and activate the account (child or parent)."""
+    email = req.email.strip().lower()
+    role = (req.role or "").strip().lower()
+    if role not in ("child", "parent"):
+        raise HTTPException(400, "Role must be 'child' or 'parent'.")
+
+    ok, detail, _meta = verify_otp(role=role, email=email, code=req.code, expected_purpose="signup")
+    if not ok:
+        raise HTTPException(400, detail)
+
+    if role == "child":
+        users = load_users()
+        user = users.get(email)
+        if not user:
+            raise HTTPException(404, "Account not found. Please sign up again.")
+        user["email_verified"] = True
+        users[email] = user
+        save_users(users)
+        safe = _strip_password(user)
+        token = create_session(email, safe, current_page="dashboard", language="en")
+        return {"token": token, "user": safe}
+
+    parent = get_parent(email)
+    if not parent:
+        raise HTTPException(404, "Parent account not found. Please sign up again.")
+    update_parent(email, email_verified=True)
+    parent = get_parent(email)
+    token = _create_parent_session(email)
+    return {"token": token, "user": parent_strip_pw(parent)}
+
+
+class ResendOtpReq(BaseModel):
+    email: str
+    role: str
+
+
+@app.post("/api/auth/resend-otp", response_model=SignupPendingResponse)
+def resend_otp(req: ResendOtpReq):
+    email = req.email.strip().lower()
+    role = (req.role or "").strip().lower()
+    if role not in ("child", "parent"):
+        raise HTTPException(400, "Role must be 'child' or 'parent'.")
+
+    if role == "child":
+        user = load_users().get(email)
+        if not user:
+            raise HTTPException(404, "No signup found for this email.")
+        if user.get("email_verified") is True:
+            raise HTTPException(400, "Email is already verified. Please log in.")
+    else:
+        parent = get_parent(email)
+        if not parent:
+            raise HTTPException(404, "No signup found for this email.")
+        if parent.get("email_verified") is True:
+            raise HTTPException(400, "Email is already verified. Please log in.")
+
+    sent = create_and_send_otp(role=role, email=email, purpose="signup")
+    if not sent.get("ok"):
+        raise _otp_send_http_error(sent)
+    return {
+        "ok": True,
+        "email": email,
+        "detail": sent.get("detail", "Verification code sent."),
+        "expires_in_sec": sent.get("expires_in_sec"),
+        "retry_after_sec": sent.get("retry_after_sec"),
+        "dev_mode": bool(sent.get("dev_mode")),
+        "dev_otp": sent.get("dev_otp"),
+    }
+
+
+# ── Forgot password (child + parent, email OTP) ───────────────────────────────
+
+_FORGOT_GENERIC_DETAIL = (
+    "If an account exists for this email, we sent a verification code. "
+    "Check your inbox (and Spam)."
+)
+
+
+class ForgotPasswordRequestReq(BaseModel):
+    email: str
+    role: str  # "child" | "parent"
+
+
+class ForgotPasswordVerifyReq(BaseModel):
+    email: str
+    role: str
+    code: str
+
+
+class ForgotPasswordResetReq(BaseModel):
+    email: str
+    role: str
+    reset_token: str
+    new_password: str
+
+
+def _forgot_account_exists(role: str, email: str) -> bool:
+    if role == "child":
+        return email in load_users()
+    return get_parent(email) is not None
+
+
+def _revoke_sessions_after_password_reset(role: str, email: str) -> None:
+    """Old sessions must not keep working after a password reset."""
+    email = email.strip().lower()
+    if role == "child":
+        from utils.user_cleanup import delete_sessions_for_email
+        delete_sessions_for_email(email)
+        return
+    sessions = _load_parent_sessions()
+    keep = {tok: s for tok, s in sessions.items() if s.get("email") != email}
+    _save_parent_sessions(keep)
+
+
+@app.post("/api/auth/forgot-password/request", response_model=SignupPendingResponse)
+def forgot_password_request(req: ForgotPasswordRequestReq):
+    """
+    Send a password-reset OTP to a registered email (child or parent).
+    Always returns a generic success payload to avoid email enumeration.
+    """
+    email = req.email.strip().lower()
+    role = (req.role or "").strip().lower()
+    if role not in ("child", "parent"):
+        raise HTTPException(400, "Role must be 'child' or 'parent'.")
+    _validate_email(email)
+
+    # Anti-enumeration: same response whether or not the account exists.
+    if not _forgot_account_exists(role, email):
+        return {
+            "ok": True,
+            "email": email,
+            "detail": _FORGOT_GENERIC_DETAIL,
+            "expires_in_sec": None,
+            "retry_after_sec": 60,
+            "dev_mode": False,
+            "dev_otp": None,
+        }
+
+    sent = create_and_send_otp(role=role, email=email, purpose="password_reset")
+    if not sent.get("ok"):
+        raise _otp_send_http_error(sent)
+
+    return {
+        "ok": True,
+        "email": email,
+        "detail": _FORGOT_GENERIC_DETAIL,
+        "expires_in_sec": sent.get("expires_in_sec"),
+        "retry_after_sec": sent.get("retry_after_sec"),
+        "dev_mode": bool(sent.get("dev_mode")),
+        "dev_otp": sent.get("dev_otp"),
+    }
+
+
+@app.post("/api/auth/forgot-password/resend", response_model=SignupPendingResponse)
+def forgot_password_resend(req: ForgotPasswordRequestReq):
+    """Resend password-reset OTP (same rules / anti-enumeration as request)."""
+    return forgot_password_request(req)
+
+
+@app.post("/api/auth/forgot-password/verify")
+def forgot_password_verify(req: ForgotPasswordVerifyReq):
+    """Verify the email OTP; on success issue a short-lived one-time reset token."""
+    email = req.email.strip().lower()
+    role = (req.role or "").strip().lower()
+    if role not in ("child", "parent"):
+        raise HTTPException(400, "Role must be 'child' or 'parent'.")
+
+    ok, detail, _meta = verify_otp(
+        role=role, email=email, code=req.code, expected_purpose="password_reset"
+    )
+    if not ok:
+        raise HTTPException(400, detail)
+
+    if not _forgot_account_exists(role, email):
+        raise HTTPException(400, "Account not found. Please request a new code.")
+
+    reset_token = issue_password_reset_grant(role=role, email=email)
+    return {
+        "ok": True,
+        "email": email,
+        "role": role,
+        "reset_token": reset_token,
+        "detail": "Code verified. You can set a new password now.",
+    }
+
+
+@app.post("/api/auth/forgot-password/reset")
+def forgot_password_reset(req: ForgotPasswordResetReq):
+    """Consume reset token and update password (child or parent)."""
+    email = req.email.strip().lower()
+    role = (req.role or "").strip().lower()
+    if role not in ("child", "parent"):
+        raise HTTPException(400, "Role must be 'child' or 'parent'.")
+
+    # Validate strength before consuming the one-time grant.
+    err = _validate_password(req.new_password)
+    if err:
+        raise HTTPException(400, err)
+
+    ok, detail = consume_password_reset_grant(
+        role=role, email=email, token=req.reset_token
+    )
+    if not ok:
+        raise HTTPException(400, detail)
+
+    if role == "child":
+        users = load_users()
+        user = users.get(email)
+        if not user:
+            raise HTTPException(404, "Account not found.")
+        user["password"] = hash_password(req.new_password)
+        # Password reset implies they control this inbox.
+        user["email_verified"] = True
+        users[email] = user
+        save_users(users)
+    else:
+        parent = get_parent(email)
+        if not parent:
+            raise HTTPException(404, "Account not found.")
+        update_parent(
+            email,
+            password=hash_password(req.new_password),
+            email_verified=True,
+        )
+
+    _revoke_sessions_after_password_reset(role, email)
+    return {
+        "ok": True,
+        "detail": "Your password has been updated successfully.",
+    }
 
 
 # ── Parent session helpers ────────────────────────────────────────────────────
@@ -554,82 +932,56 @@ class ParentSignupReq(BaseModel):
     name: str
     email: str
     password: str
-    cnic: str
-    child_name: str
-    child_cnic: str
-    family_code: str
+    relationship: str  # father | mother
 
 
-@app.post("/api/auth/parent/signup", response_model=AuthResponse)
+@app.post("/api/auth/parent/signup", response_model=SignupPendingResponse)
 def parent_signup(req: ParentSignupReq):
-    """Register a parent account linked to an existing student via family code."""
-    from utils.family_link import cnic_match, find_student_by_identity, names_match, validate_cnic
-
+    """Create an unverified parent account and email a 6-digit OTP."""
     email = req.email.strip().lower()
     _validate_email(email)
     pw_err = _validate_password(req.password)
     if pw_err:
         raise HTTPException(400, pw_err)
+    if len((req.name or "").strip()) < 2:
+        raise HTTPException(400, "Please enter your name.")
+    relationship = normalize_relationship(req.relationship)
+    if not relationship:
+        raise HTTPException(400, "Please choose Father or Mother.")
 
-    try:
-        cnic_fmt = validate_cnic(req.cnic, "Your CNIC")
-        validate_cnic(req.child_cnic, "Child CNIC")
-    except ValueError as exc:
-        raise HTTPException(400, str(exc))
-
-    family_code = req.family_code.strip()
-    if not re.fullmatch(r"\d{6}", family_code):
-        raise HTTPException(400, "Family code must be exactly 6 digits.")
-
-    if parent_exists(email):
-        raise HTTPException(400, "A parent account with this email already exists.")
-
-    users = load_users()
-    matched_child = find_student_by_identity(users, req.child_name, req.child_cnic)
-
-    if matched_child is None:
-        raise HTTPException(
-            404,
-            f"No student named '{req.child_name.strip()}' with that CNIC found. "
-            "Please check the details or ask your child to sign up first.",
-        )
-
-    stored_code = (matched_child.get("family_code") or "").strip()
-    if not stored_code:
+    if email in load_users():
         raise HTTPException(
             400,
-            "This student account was created before family linking was enabled. "
-            "Ask them to contact support or re-register.",
-        )
-    if stored_code != family_code:
-        raise HTTPException(
-            403,
-            "Invalid family code. Ask your child for the 6-digit code shown when they signed up.",
+            "This email is already used by a student account. "
+            "Parent and child must use different emails.",
         )
 
-    if not names_match(matched_child.get("parent_name"), req.name):
-        raise HTTPException(
-            403,
-            "Your name does not match the parent name registered with this student.",
-        )
+    existing = get_parent(email)
+    if existing and existing.get("email_verified") is not False:
+        raise HTTPException(400, "A parent account with this email already exists. Please log in.")
 
-    if not cnic_match(matched_child.get("parent_cnic"), req.cnic):
-        raise HTTPException(
-            403,
-            "Your CNIC does not match the parent CNIC registered with this student.",
-        )
-
-    record = create_parent(
+    create_parent(
         email=email,
         name=req.name.strip() or "Parent",
         password_hash=hash_password(req.password),
-        cnic=cnic_fmt,
-        child_email=matched_child["email"],
-        verified=True,
+        email_verified=False,
+        relationship=relationship,
+        link_status="none",
     )
 
-    token = _create_parent_session(email)
-    return {"token": token, "user": parent_strip_pw(record)}
+    sent = create_and_send_otp(role="parent", email=email, purpose="signup")
+    if not sent.get("ok"):
+        raise _otp_send_http_error(sent)
+
+    return {
+        "ok": True,
+        "email": email,
+        "detail": sent.get("detail", "Verification code sent."),
+        "expires_in_sec": sent.get("expires_in_sec"),
+        "retry_after_sec": sent.get("retry_after_sec"),
+        "dev_mode": bool(sent.get("dev_mode")),
+        "dev_otp": sent.get("dev_otp"),
+    }
 
 
 # ── Parent login ──────────────────────────────────────────────────────────────
@@ -645,6 +997,11 @@ def parent_login(req: ParentLoginReq):
     parent = get_parent(email)
     if not parent or not verify_password(req.password, parent.get("password", "")):
         raise HTTPException(401, "Invalid email or password.")
+    if parent.get("email_verified") is False:
+        raise HTTPException(
+            403,
+            "Please verify your email before logging in. Check your inbox for the code.",
+        )
     token = _create_parent_session(email)
     return {"token": token, "user": parent_strip_pw(parent)}
 
@@ -660,19 +1017,493 @@ def parent_me(current=Depends(get_current_parent)):
     return parent_strip_pw(current["parent"])
 
 
+class ParentPasswordChangeReq(BaseModel):
+    current_password: str
+    new_password: str
+
+
+@app.post("/api/auth/parent/password")
+def parent_change_password(body: ParentPasswordChangeReq, current=Depends(get_current_parent)):
+    """Allow a logged-in parent to change their password."""
+    email = current["email"]
+    parent = get_parent(email)
+    if not parent:
+        raise HTTPException(404, "Parent account not found.")
+    if not verify_password(body.current_password, parent.get("password", "")):
+        raise HTTPException(400, "Current password is incorrect.")
+    err = _validate_password(body.new_password)
+    if err:
+        raise HTTPException(400, err)
+    update_parent(email, password=hash_password(body.new_password))
+    return {"ok": True, "detail": "Password updated."}
+
+
+class ParentDeleteReq(BaseModel):
+    password: str
+
+
+@app.post("/api/auth/parent/delete")
+def parent_delete_account(body: ParentDeleteReq, current=Depends(get_current_parent)):
+    """Permanently delete the logged-in parent account."""
+    email = current["email"]
+    parent = get_parent(email)
+    if not parent:
+        raise HTTPException(404, "Parent account not found.")
+    if not verify_password(body.password, parent.get("password", "")):
+        raise HTTPException(400, "Password is incorrect.")
+
+    clear_parent_links(email)
+    if not delete_parent(email):
+        raise HTTPException(500, "Could not delete parent account.")
+
+    # Drop all sessions for this parent email
+    sessions = _load_parent_sessions()
+    keep = {tok: s for tok, s in sessions.items() if s.get("email") != email}
+    _save_parent_sessions(keep)
+    return {"ok": True, "detail": "Parent account deleted."}
+
+
+# ── V6: Family invitation + child approval ───────────────────────────────────
+
+class CreateInviteReq(BaseModel):
+    parent_email: Optional[str] = None  # optional: email the code to parent
+
+
+@app.post("/api/family/invite")
+def family_create_invite(body: Optional[CreateInviteReq] = None, current=Depends(get_current_user)):
+    """Child generates a temporary single-use Family Invitation Code."""
+    email = current["email"]
+    user = current["user"]
+    if user.get("email_verified") is False:
+        raise HTTPException(403, "Verify your email before inviting a parent.")
+
+    slots = slots_for_child(email)
+    if not slots.get("can_invite_more"):
+        raise HTTPException(
+            400,
+            "Both Father and Mother slots are already linked. Unlink one before inviting again.",
+        )
+
+    invite = create_invite(email)
+
+    email_sent = False
+    email_detail: Optional[str] = None
+    parent_email = ((body.parent_email if body else None) or "").strip().lower()
+    if parent_email:
+        _validate_email(parent_email)
+        if parent_email == email:
+            raise HTTPException(
+                400,
+                "Parent and child cannot use the same email address.",
+            )
+        ok, detail = send_family_invite_email(
+            to=parent_email,
+            child_name=str(user.get("name") or "Your child"),
+            code=invite["code"],
+            expires_in_hours=int(invite["expires_in_hours"]),
+        )
+        email_sent = ok
+        if ok:
+            email_detail = (
+                f"Invitation emailed to {parent_email}. "
+                "Ask them to check Inbox and Spam."
+            )
+        else:
+            email_detail = (
+                detail
+                or "Could not send the email. Share the invitation code manually."
+            )
+
+    return {
+        "ok": True,
+        "invite_id": invite["invite_id"],
+        "code": invite["code"],
+        "expires_at": invite["expires_at"],
+        "expires_in_hours": invite["expires_in_hours"],
+        "email_sent": email_sent,
+        "email_detail": email_detail,
+        "emailed_to": parent_email if email_sent else None,
+    }
+
+
+@app.get("/api/family/status")
+def family_status_child(current=Depends(get_current_user)):
+    return get_link_status_for_child(current["email"])
+
+
+@app.post("/api/family/invite/{invite_id}/cancel")
+def family_cancel_invite(invite_id: str, current=Depends(get_current_user)):
+    if not cancel_invite(current["email"], invite_id):
+        raise HTTPException(404, "Invite not found or already used.")
+    return {"ok": True, "status": get_link_status_for_child(current["email"])}
+
+
+class ApproveRejectReq(BaseModel):
+    invite_id: str
+
+
+@app.post("/api/family/approve")
+def family_approve(body: ApproveRejectReq, current=Depends(get_current_user)):
+    ok, detail, info = approve_invite(current["email"], body.invite_id)
+    if not ok or not info:
+        raise HTTPException(400, detail)
+    parent_email = info["parent_email"]
+    add_linked_child(
+        parent_email,
+        current["email"],
+        invite_id=info.get("invite_id"),
+        linked_at=info.get("linked_at"),
+        relationship=info.get("relationship"),
+    )
+    return {
+        "ok": True,
+        "linked_parent_email": parent_email,
+        "relationship": info.get("relationship"),
+        "status": get_link_status_for_child(current["email"]),
+    }
+
+
+def _frontend_base() -> str:
+    return (os.environ.get("FRONTEND_URL") or "http://localhost:3000").rstrip("/")
+
+
+def _notify_child_parent_link_request(
+    *,
+    child_email: str,
+    child_name: str,
+    parent_name: str,
+    parent_email: str,
+    approve_token: str,
+) -> Tuple[bool, str]:
+    base = _frontend_base()
+    approve_url = f"{base}/family/respond?token={approve_token}&action=approve"
+    reject_url = f"{base}/family/respond?token={approve_token}&action=reject"
+    return send_parent_link_request_email(
+        to=child_email,
+        child_name=child_name,
+        parent_name=parent_name,
+        parent_email=parent_email,
+        approve_url=approve_url,
+        reject_url=reject_url,
+    )
+
+
+class EmailRespondReq(BaseModel):
+    token: str
+    action: str  # approve | reject
+
+
+@app.post("/api/family/email-respond")
+def family_email_respond(body: EmailRespondReq):
+    """Approve/reject via one-time link from the student's email (no login required)."""
+    ok, detail, info = respond_with_approve_token(body.token, body.action)
+    if not ok or not info:
+        raise HTTPException(400, detail)
+
+    parent_email = info["parent_email"]
+    child_email = info["child_email"]
+    if info["action"] == "approve":
+        add_linked_child(
+            parent_email,
+            child_email,
+            invite_id=info.get("invite_id"),
+            linked_at=info.get("linked_at"),
+            relationship=info.get("relationship"),
+        )
+        return {
+            "ok": True,
+            "action": "approve",
+            "detail": f"Linked with {parent_email}.",
+            "parent_email": parent_email,
+            "parent_name": info.get("parent_name"),
+            "relationship": info.get("relationship"),
+        }
+
+    # Reject: clear pending only — keep any other linked children
+    update_parent(
+        parent_email,
+        pending_child_email=None,
+        pending_invite_id=None,
+    )
+    return {
+        "ok": True,
+        "action": "reject",
+        "detail": "Parent request rejected.",
+        "parent_email": parent_email,
+        "parent_name": info.get("parent_name"),
+    }
+
+
+@app.post("/api/family/pending/{invite_id}/email-again")
+def family_email_pending_again(invite_id: str, current=Depends(get_current_user)):
+    """Resend Approve/Reject email to the student's own inbox."""
+    ok, detail, info = reissue_approve_token(current["email"], invite_id)
+    if not ok:
+        raise HTTPException(400, detail)
+    user = current["user"]
+    sent_ok, sent_detail = _notify_child_parent_link_request(
+        child_email=current["email"],
+        child_name=str(user.get("name") or "there"),
+        parent_name=str(info["parent_name"]),
+        parent_email=str(info["parent_email"]),
+        approve_token=str(info["approve_token"]),
+    )
+    if not sent_ok:
+        raise HTTPException(400, sent_detail)
+    return {
+        "ok": True,
+        "detail": f"Approval email sent to {current['email']}. Check Inbox and Spam.",
+        "emailed_to": current["email"],
+    }
+
+
+@app.post("/api/family/reject")
+def family_reject(body: ApproveRejectReq, current=Depends(get_current_user)):
+    # Capture pending parent before reject clears it
+    pending_parent = None
+    for p in get_pending_for_child(current["email"]):
+        if p.get("invite_id") == body.invite_id:
+            pending_parent = p.get("parent_email")
+            break
+
+    ok, detail = reject_invite(current["email"], body.invite_id)
+    if not ok:
+        raise HTTPException(400, detail)
+
+    if pending_parent:
+        update_parent(
+            pending_parent,
+            pending_child_email=None,
+            pending_invite_id=None,
+        )
+    else:
+        for pemail, prec in list(load_parents().items()):
+            if prec.get("pending_invite_id") == body.invite_id:
+                update_parent(
+                    pemail,
+                    pending_child_email=None,
+                    pending_invite_id=None,
+                )
+    return {"ok": True, "status": get_link_status_for_child(current["email"])}
+
+
+class UnlinkReq(BaseModel):
+    invite_id: Optional[str] = None
+    parent_email: Optional[str] = None
+
+
+@app.post("/api/family/unlink")
+def family_unlink_child(
+    body: Optional[UnlinkReq] = None,
+    current=Depends(get_current_user),
+):
+    """Child unlinks one (or all) linked parent(s)."""
+    status = get_link_status_for_child(current["email"])
+    linked_parents = status.get("linked_parents") or []
+    if not linked_parents and not status.get("linked_parent"):
+        raise HTTPException(400, "No linked parent to unlink.")
+
+    invite_id = (body.invite_id if body else None) or None
+    parent_email = (body.parent_email if body else None) or None
+    # Back-compat: no target → unlink singular first/only parent
+    if not invite_id and not parent_email and status.get("linked_parent"):
+        parent_email = status["linked_parent"]["email"]
+        invite_id = status["linked_parent"].get("invite_id")
+
+    ok, unlinked = unlink_parent_from_child(
+        current["email"],
+        parent_email=parent_email,
+        invite_id=invite_id,
+    )
+    if not ok:
+        raise HTTPException(400, "Could not unlink parent.")
+
+    for pem in unlinked:
+        remove_linked_child(pem, current["email"])
+
+    return {"ok": True, "status": get_link_status_for_child(current["email"])}
+
+
+class RedeemInviteReq(BaseModel):
+    code: str
+
+
+@app.post("/api/auth/parent/redeem-invite")
+def parent_redeem_invite(body: RedeemInviteReq, current=Depends(get_current_parent)):
+    """Parent enters Family Invitation Code → pending child approval."""
+    parent = current["parent"]
+    if parent.get("email_verified") is False:
+        raise HTTPException(403, "Verify your email first.")
+
+    relationship = normalize_relationship(parent.get("relationship"))
+    if not relationship:
+        raise HTTPException(400, "Your account is missing a Father/Mother designation.")
+
+    if parent.get("pending_child_email"):
+        raise HTTPException(
+            400,
+            f"You already have a pending request for {parent['pending_child_email']}. "
+            "Wait for approval before linking another child.",
+        )
+
+    ok, detail, info = redeem_invite(
+        plain_code=body.code,
+        parent_email=current["email"],
+        parent_name=parent.get("name") or "Parent",
+        relationship=relationship,
+    )
+    if not ok:
+        raise HTTPException(400, detail)
+
+    if info and info.get("child_email") == current["email"]:
+        # Should never happen (same email can't be both roles), but guard linking.
+        raise HTTPException(
+            400,
+            "Parent and child cannot use the same email address.",
+        )
+
+    # Keep existing children[]; only set pending fields
+    update_parent(
+        current["email"],
+        link_status="pending",
+        pending_child_email=info["child_email"],
+        pending_invite_id=info["invite_id"],
+    )
+
+    child_email = info["child_email"]
+    child_user = load_users().get(child_email) or {}
+    emailed = False
+    email_detail = None
+    sent_ok, sent_detail = _notify_child_parent_link_request(
+        child_email=child_email,
+        child_name=str(child_user.get("name") or "there"),
+        parent_name=str(info.get("parent_name") or parent.get("name") or "Parent"),
+        parent_email=current["email"],
+        approve_token=str(info["approve_token"]),
+    )
+    emailed = sent_ok
+    email_detail = (
+        f"Approval email sent to {child_email}."
+        if sent_ok
+        else (sent_detail or "Could not email the student — they can still Approve in Settings → Family.")
+    )
+
+    return {
+        "ok": True,
+        "detail": (
+            f"Request sent to your child's email ({child_email}). "
+            "Ask them to Approve from that email (or Settings → Family)."
+        ),
+        "pending_child_email": child_email,
+        "invite_id": info["invite_id"],
+        "child_notified": emailed,
+        "child_notify_detail": email_detail,
+        "parent": parent_strip_pw(get_parent(current["email"])),
+    }
+
+
+@app.get("/api/auth/parent/link-status")
+def parent_link_status(current=Depends(get_current_parent)):
+    p = current["parent"]
+    children = get_parent_children(current["email"])
+    return {
+        "link_status": p.get("link_status") or ("linked" if children else "none"),
+        "relationship": p.get("relationship"),
+        "child_email": p.get("child_email"),
+        "children": children,
+        "pending_child_email": p.get("pending_child_email"),
+        "pending_invite_id": p.get("pending_invite_id"),
+    }
+
+
+def _parent_resolve_child_email(parent: dict, child_email: Optional[str]) -> str:
+    """Ensure the parent is linked to the requested child (or the only child)."""
+    linked = [
+        (c.get("email") or "").strip().lower()
+        for c in (parent.get("children") or [])
+        if isinstance(c, dict) and c.get("email")
+    ]
+    # Legacy fallback
+    if not linked and parent.get("child_email"):
+        linked = [parent["child_email"].strip().lower()]
+
+    if not linked:
+        raise HTTPException(
+            404,
+            "No linked child yet. Enter a Family Invitation Code from your child.",
+        )
+
+    if child_email:
+        target = child_email.strip().lower()
+        if target not in linked:
+            raise HTTPException(403, "You are not linked to this child.")
+        return target
+
+    if len(linked) == 1:
+        return linked[0]
+
+    raise HTTPException(
+        400,
+        "Multiple children linked. Select a child (pass child_email).",
+    )
+
+
+@app.get("/api/parent/children")
+def parent_children_list(current=Depends(get_current_parent)):
+    """List all children linked to this parent (for selection screen)."""
+    parent = current["parent"]
+    users = load_users()
+    items = []
+    for c in get_parent_children(current["email"]):
+        email = c.get("email")
+        if not email:
+            continue
+        child = users.get(email) or {}
+        items.append({
+            "email": email,
+            "name": child.get("name") or email.split("@")[0],
+            "grade": child.get("grade"),
+            "stars": child.get("stars", 0),
+            "avatar": child.get("avatar"),
+            "relationship": c.get("relationship") or parent.get("relationship") or "father",
+            "linked_at": c.get("linked_at"),
+            "exists": bool(child),
+        })
+    # Drop orphans (child deleted but somehow still listed)
+    items = [i for i in items if i["exists"]]
+    return {
+        "relationship": parent.get("relationship"),
+        "pending_child_email": parent.get("pending_child_email"),
+        "pending_invite_id": parent.get("pending_invite_id"),
+        "link_status": parent.get("link_status"),
+        "children": items,
+        "count": len(items),
+    }
+
+
 # ── Parent dashboard data ─────────────────────────────────────────────────────
 
 @app.get("/api/parent/dashboard")
-def parent_dashboard(current=Depends(get_current_parent)):
-    """Return enriched child analytics for the parent dashboard."""
+def parent_dashboard(
+    child_email: Optional[str] = None,
+    current=Depends(get_current_parent),
+):
+    """Return enriched child analytics for the selected linked child."""
     parent = current["parent"]
-    child_email = parent.get("child_email")
-    if not child_email:
-        raise HTTPException(404, "No linked child found.")
+    linked = get_parent_children(current["email"])
+    if not linked and parent.get("pending_child_email"):
+        raise HTTPException(
+            409,
+            "Waiting for your child to Approve via their email (or Settings → Family).",
+        )
+
+    child_email = _parent_resolve_child_email(parent, child_email)
 
     users = load_users()
     child = users.get(child_email)
     if not child:
+        # Stale link — scrub from parent
+        remove_linked_child(current["email"], child_email)
         raise HTTPException(404, "Child account not found.")
 
     analytics = get_user_analytics(child_email)
@@ -736,13 +1567,22 @@ def parent_dashboard(current=Depends(get_current_parent)):
         older_avg  = sum(q.get("score_percent", 0) for q in quiz_history[half:]) / half
         improvement = round(recent_avg - older_avg, 1)
 
+    rel = parent.get("relationship") or "father"
+    for c in linked:
+        if c.get("email") == child_email:
+            rel = c.get("relationship") or rel
+            break
+
     return {
         "child": {
             "name":  child.get("name"),
             "grade": child.get("grade"),
             "stars": child.get("stars", 0),
             "email": child_email,
+            "avatar": child.get("avatar"),
         },
+        "relationship": rel,
+        "children_count": len(linked),
         "analytics":        analytics,
         "favourite_subject": fav_subject,
         "total_chats":      len(chats),
@@ -757,16 +1597,18 @@ def parent_dashboard(current=Depends(get_current_parent)):
 
 
 @app.get("/api/parent/report")
-async def parent_report(current=Depends(get_current_parent)):
-    """Generate an AI progress report for the linked child."""
+async def parent_report(
+    child_email: Optional[str] = None,
+    current=Depends(get_current_parent),
+):
+    """Generate an AI progress report for the selected linked child."""
     parent = current["parent"]
-    child_email = parent.get("child_email")
-    if not child_email:
-        raise HTTPException(404, "No linked child found.")
+    child_email = _parent_resolve_child_email(parent, child_email)
 
     users = load_users()
     child = users.get(child_email)
     if not child:
+        remove_linked_child(current["email"], child_email)
         raise HTTPException(404, "Child account not found.")
 
     analytics = get_user_analytics(child_email)
@@ -928,6 +1770,241 @@ def change_password(body: PasswordChangeRequest, current=Depends(get_current_use
     return {"ok": True}
 
 
+VALID_AVATARS = {f"avatar_{i}" for i in range(1, 13)}
+
+
+class AvatarUpdateReq(BaseModel):
+    avatar: str
+
+
+@app.patch("/api/users/me/avatar")
+def update_my_avatar(body: AvatarUpdateReq, current=Depends(get_current_user)):
+    """
+    Part B #2 — Avatar-based profile pictures. Students pick a friendly
+    illustrated avatar instead of uploading a real photo; changeable anytime
+    from Settings → Profile.
+    """
+    if body.avatar not in VALID_AVATARS:
+        raise HTTPException(400, "Unknown avatar id.")
+    email = current["email"]
+    users = load_users()
+    user = users.get(email)
+    if not user:
+        raise HTTPException(404, "User not found.")
+    user["avatar"] = body.avatar
+    users[email] = user
+    save_users(users)
+    return _strip_password(user)
+
+
+class ChangeEmailReq(BaseModel):
+    new_email: str
+    password: str
+
+
+class VerifyEmailChangeReq(BaseModel):
+    new_email: str
+    code: str
+
+
+@app.post("/api/users/me/email/request")
+def request_my_email_change(body: ChangeEmailReq, current=Depends(get_current_user)):
+    """Send OTP to the *new* email before applying a student email change."""
+    old_email = current["email"]
+    new_email = body.new_email.strip().lower()
+    if "@" not in new_email or "." not in new_email.split("@")[-1]:
+        raise HTTPException(400, "Please enter a valid email address.")
+
+    users = load_users()
+    user = users.get(old_email)
+    if not user:
+        raise HTTPException(404, "User not found.")
+    if not verify_password(body.password, user.get("password", "")):
+        raise HTTPException(400, "Password is incorrect.")
+    if new_email == old_email:
+        raise HTTPException(400, "That is already your current email.")
+    if new_email in users:
+        raise HTTPException(400, "An account with this email already exists.")
+    if parent_exists(new_email):
+        raise HTTPException(
+            400,
+            "This email is already used by a parent account. "
+            "Parent and child must use different emails.",
+        )
+
+    sent = create_and_send_otp(
+        role="child",
+        email=new_email,
+        purpose="email_change",
+        meta={"old_email": old_email},
+    )
+    if not sent.get("ok"):
+        raise _otp_send_http_error(sent)
+    return {
+        "ok": True,
+        "email": new_email,
+        "detail": sent.get("detail", "Verification code sent to your new email."),
+        "expires_in_sec": sent.get("expires_in_sec"),
+        "retry_after_sec": sent.get("retry_after_sec"),
+        "dev_mode": bool(sent.get("dev_mode")),
+        "dev_otp": sent.get("dev_otp"),
+    }
+
+
+@app.post("/api/users/me/email/verify")
+def verify_my_email_change(body: VerifyEmailChangeReq, current=Depends(get_current_user)):
+    """Confirm OTP on the new email, then migrate the student account."""
+    from utils.user_cleanup import change_student_email
+
+    old_email = current["email"]
+    new_email = body.new_email.strip().lower()
+    ok, detail, meta = verify_otp(
+        role="child",
+        email=new_email,
+        code=body.code,
+        expected_purpose="email_change",
+    )
+    if not ok:
+        raise HTTPException(400, detail)
+    if (meta or {}).get("old_email") != old_email:
+        raise HTTPException(400, "This code was not issued for your account. Request a new one.")
+    if new_email in load_users():
+        raise HTTPException(400, "An account with this email already exists.")
+    if parent_exists(new_email):
+        raise HTTPException(
+            400,
+            "This email is already used by a parent account. "
+            "Parent and child must use different emails.",
+        )
+
+    if not change_student_email(old_email, new_email, current_token=current["token"]):
+        raise HTTPException(404, "User not found.")
+
+    updated = load_users()[new_email]
+    return {
+        "ok": True,
+        "user": _strip_password(updated),
+        "detail": "Email updated and verified.",
+    }
+
+
+@app.post("/api/users/me/email")
+def change_my_email_legacy(body: ChangeEmailReq, current=Depends(get_current_user)):
+    """Legacy: starts OTP verification for the new email (same as /email/request)."""
+    return request_my_email_change(body, current)
+
+
+@app.post("/api/auth/parent/email/request")
+def parent_request_email_change(body: ChangeEmailReq, current=Depends(get_current_parent)):
+    """Send OTP to parent's new email. After verify, family link is cleared (must re-link)."""
+    old_email = current["email"]
+    new_email = body.new_email.strip().lower()
+    if "@" not in new_email or "." not in new_email.split("@")[-1]:
+        raise HTTPException(400, "Please enter a valid email address.")
+
+    parent = get_parent(old_email)
+    if not parent:
+        raise HTTPException(404, "Parent account not found.")
+    if not verify_password(body.password, parent.get("password", "")):
+        raise HTTPException(400, "Password is incorrect.")
+    if new_email == old_email:
+        raise HTTPException(400, "That is already your current email.")
+    if parent_exists(new_email):
+        raise HTTPException(400, "An account with this email already exists.")
+    if new_email in load_users():
+        raise HTTPException(
+            400,
+            "This email is already used by a student account. "
+            "Parent and child must use different emails.",
+        )
+
+    sent = create_and_send_otp(
+        role="parent",
+        email=new_email,
+        purpose="email_change",
+        meta={"old_email": old_email},
+    )
+    if not sent.get("ok"):
+        raise _otp_send_http_error(sent)
+    return {
+        "ok": True,
+        "email": new_email,
+        "detail": (
+            sent.get("detail", "Verification code sent.")
+            + " After you confirm, you'll need to link your child again."
+        ),
+        "expires_in_sec": sent.get("expires_in_sec"),
+        "retry_after_sec": sent.get("retry_after_sec"),
+        "dev_mode": bool(sent.get("dev_mode")),
+        "dev_otp": sent.get("dev_otp"),
+        "will_unlink": True,
+    }
+
+
+@app.post("/api/auth/parent/email/verify")
+def parent_verify_email_change(body: VerifyEmailChangeReq, current=Depends(get_current_parent)):
+    from utils.user_cleanup import change_parent_email
+
+    old_email = current["email"]
+    new_email = body.new_email.strip().lower()
+    ok, detail, meta = verify_otp(
+        role="parent",
+        email=new_email,
+        code=body.code,
+        expected_purpose="email_change",
+    )
+    if not ok:
+        raise HTTPException(400, detail)
+    if (meta or {}).get("old_email") != old_email:
+        raise HTTPException(400, "This code was not issued for your account. Request a new one.")
+    if parent_exists(new_email):
+        raise HTTPException(400, "An account with this email already exists.")
+    if new_email in load_users():
+        raise HTTPException(
+            400,
+            "This email is already used by a student account. "
+            "Parent and child must use different emails.",
+        )
+
+    if not change_parent_email(old_email, new_email, current_token=current["token"]):
+        raise HTTPException(400, "Could not update parent email.")
+
+    updated = get_parent(new_email)
+    return {
+        "ok": True,
+        "user": parent_strip_pw(updated),
+        "detail": "Email updated. Your child link was cleared — enter a new Family Invitation Code to re-link.",
+        "needs_relink": True,
+    }
+
+
+class ChangeGradeReq(BaseModel):
+    grade: int
+
+
+@app.patch("/api/users/me/grade")
+def change_my_grade(body: ChangeGradeReq, current=Depends(get_current_user)):
+    """Part B #8 — let a student update their grade/class from Settings."""
+    if body.grade not in GRADE_SUBJECTS:
+        raise HTTPException(400, "Grade must be between 4 and 7.")
+
+    email = current["email"]
+    users = load_users()
+    user = users.get(email)
+    if not user:
+        raise HTTPException(404, "User not found.")
+    user["grade"] = body.grade
+    users[email] = user
+    save_users(users)
+
+    sessions = load_sessions()
+    if current["token"] in sessions and isinstance(sessions[current["token"]].get("user_data"), dict):
+        sessions[current["token"]]["user_data"]["grade"] = body.grade
+        save_sessions(sessions)
+
+    return _strip_password(user)
+
+
 class DeleteAccountReq(BaseModel):
     password: str
 
@@ -972,6 +2049,151 @@ def my_stats(current=Depends(get_current_user)):
         "daily_activity": analytics["daily_activity"],
         "subject_breakdown": analytics["subject_breakdown"],
     }
+
+
+def _dashboard_bundle(email: str) -> dict:
+    """Part B #9 — enriched dashboard: time, lessons, mood, schedule, journey."""
+    analytics = get_user_analytics(email)
+    daily = analytics.get("daily_activity") or []
+    today_s = date.today().isoformat()
+    week_cutoff = (date.today() - timedelta(days=6)).isoformat()
+
+    time_today = 0.0
+    time_week = 0.0
+    for day in daily:
+        t = float(day.get("time") or 0)
+        d = day.get("date") or ""
+        if d == today_s:
+            time_today = t
+        if d >= week_cutoff:
+            time_week += t
+
+    chats = get_user_chats(email)
+    lessons_covered = len(chats)
+    lessons_today = sum(
+        1 for c in chats if (c.get("timestamp") or "")[:10] == today_s
+    )
+
+    quiz_dates = {
+        d["date"]
+        for d in daily
+        if d.get("date") and (d.get("questions") or 0) > 0
+    }
+    chat_dates = {
+        (c.get("timestamp") or "")[:10]
+        for c in chats
+        if c.get("timestamp")
+    }
+    chat_dates.discard("")
+    active_days = merge_activity_dates(email, quiz_dates, chat_dates)
+    journey = compute_journey(active_days)
+
+    return {
+        "time": {
+            "today_minutes": round(time_today, 1),
+            "week_minutes": round(time_week, 1),
+            "total_minutes": analytics.get("total_time_minutes", 0),
+        },
+        "lessons": {
+            "covered": lessons_covered,
+            "today": lessons_today,
+        },
+        "mood_today": get_mood_today(email),
+        "schedule": get_schedule_for_day(email, today_s),
+        "journey": journey,
+        "valid_moods": sorted(VALID_MOODS),
+    }
+
+
+@app.get("/api/users/me/dashboard")
+def my_dashboard(current=Depends(get_current_user)):
+    """Part B #9 — Dashboard enhancements payload."""
+    return _dashboard_bundle(current["email"])
+
+
+class MoodReq(BaseModel):
+    mood: str
+
+
+@app.post("/api/users/me/mood")
+def post_mood(body: MoodReq, current=Depends(get_current_user)):
+    """Self-reported mood check-in at the start of a learning session."""
+    try:
+        result = save_mood(current["email"], body.mood)
+    except ValueError as err:
+        raise HTTPException(400, str(err)) from err
+    return {**result, "dashboard": _dashboard_bundle(current["email"])}
+
+
+class ScheduleItemIn(BaseModel):
+    id: Optional[str] = None
+    title: str
+    subject: Optional[str] = None
+    done: bool = False
+
+
+class SchedulePutReq(BaseModel):
+    items: list[ScheduleItemIn]
+
+
+@app.get("/api/users/me/schedule")
+def get_schedule(current=Depends(get_current_user)):
+    return {"date": date.today().isoformat(), "items": get_schedule_for_day(current["email"])}
+
+
+@app.put("/api/users/me/schedule")
+def put_schedule(body: SchedulePutReq, current=Depends(get_current_user)):
+    items = set_schedule_for_day(
+        current["email"],
+        [i.model_dump() for i in body.items],
+    )
+    return {"date": date.today().isoformat(), "items": items}
+
+
+@app.post("/api/users/me/schedule/{item_id}/toggle")
+def post_toggle_schedule(item_id: str, current=Depends(get_current_user)):
+    items = toggle_schedule_item(current["email"], item_id)
+    return {"date": date.today().isoformat(), "items": items}
+
+
+class LearnerProfileReq(BaseModel):
+    learning_style: str        # "visual" | "audio" | "text" | "mixed"
+    preferred_language: str    # "en" | "ur"
+    audio_preference: str      # "auto" | "manual"
+    sensory_preference: str    # "calm" | "standard"
+    explanation_style: str     # "step_by_step" | "concise"
+
+
+@app.get("/api/profile/learning")
+def get_my_learner_profile(current=Depends(get_current_user)):
+    """One-time onboarding profile. Frontend uses `onboarding_completed` to
+    decide whether to show the onboarding wizard after signup/login."""
+    return get_learner_profile(current["email"])
+
+
+@app.post("/api/profile/learning")
+def set_my_learner_profile(body: LearnerProfileReq, current=Depends(get_current_user)):
+    """Save the student's one-time learning-preference answers. This becomes
+    part of the persistent Learner Profile the Media Agent reads before every
+    teaching decision (see utils/agent_memory.get_memory_context)."""
+    return save_learner_profile(
+        current["email"],
+        learning_style=body.learning_style,
+        preferred_language=body.preferred_language,
+        audio_preference=body.audio_preference,
+        sensory_preference=body.sensory_preference,
+        explanation_style=body.explanation_style,
+    )
+
+
+class AudioPreferencePatch(BaseModel):
+    audio_preference: str  # "auto" | "manual"
+
+
+@app.patch("/api/profile/learning/audio")
+def patch_audio_preference(body: AudioPreferencePatch, current=Depends(get_current_user)):
+    """Gap 6 — update narration auto/manual without re-submitting full onboarding."""
+    return update_audio_preference(current["email"], body.audio_preference)
 
 
 @app.get("/api/users/me/subjects")
@@ -1461,8 +2683,9 @@ async def synthesize_speech(req: SpeechReq, current=Depends(get_current_user)):
     if not tutor_is_configured():
         raise HTTPException(503, "Read-aloud is not available right now.")
 
+    voice = req.voice if req.voice in VALID_TTS_VOICES else None
     audio_b64 = await run_in_thread(
-        tutor_generate_speech, text=text, language=req.language or "en"
+        tutor_generate_speech, text=text, language=req.language or "en", voice=voice
     )
     if not audio_b64:
         raise HTTPException(502, "Speech generation failed.")
@@ -1887,6 +3110,12 @@ ACTION_PROMPTS = {
         "No long paragraphs, no bullet lists longer than 3 items, no comprehension questions. "
         "Be warm and gentle. Stay on the same topic."
     ),
+    "SIMPLE_TEXT_ONLY": (
+        "The student wants a SIMPLE TEXT explanation of the PREVIOUS tutor answer.\n"
+        "Write ONLY 3–6 short, easy sentences in one short paragraph.\n"
+        "Do NOT use numbered steps, bullet lists, arrow flowcharts (→), "
+        "or lines like 'Step 1'. No 'Let's break this down' headers."
+    ),
     "SHOW_VISUAL_EXPLANATION": (
         "Say ONE short friendly sentence introducing a picture that will appear next. "
         "Example: 'Here's a picture to help! 🎨' Do NOT write ASCII art or long text."
@@ -1909,6 +3138,17 @@ ACTION_PROMPTS = {
         "   📚 AI can help you find information quickly!\n\n"
         "Rules: stay on the SAME topic as the original question; no quiz questions; "
         "no long bullet lists; emojis encouraged."
+    ),
+    "STEP_BY_STEP_ONLY": (
+        "The student wants a STEP-BY-STEP explanation of the PREVIOUS tutor answer.\n"
+        "Do NOT write a summary paragraph. Do NOT repeat the full simple-text answer.\n\n"
+        "Required structure (follow exactly):\n"
+        "1) Opening (1 sentence): warm, e.g. 'Let's break this down simply! 🪜'\n"
+        "2) Concept flowcharts — 2–4 lines using REAL words from the topic:\n"
+        "   Each line: Word → next idea → next idea (add 1 emoji at the end)\n"
+        "   NEVER write 'Step 1 → Step 2 → Step 3' — use the actual concepts.\n"
+        "3) Emoji example (2 lines) from the topic.\n\n"
+        "Rules: steps/flow lines ONLY — no plain paragraph before the arrows."
     ),
     "USE_VOICE_AID": (
         "Say ONE short friendly sentence before the answer is read aloud. "
@@ -1936,10 +3176,17 @@ ACTION_PROMPTS = {
 @app.post("/api/agent/generate-content")
 async def agent_generate_content(body: ContentGenerateRequest, current=Depends(get_current_user)):
     """
-    NEW adaptive agent endpoint.
+    Adaptive agent content generation.
 
-    The TutorPolicyEngine (running locally in the browser) already decided
-    WHAT action to take. This endpoint generates the actual CONTENT for that action.
+    The local comprehension engine (running in the browser: camera signals +
+    ComprehensionStateMachine) already decided WHAT action to take. This
+    endpoint used to generate content from the action alone — meaning the
+    Media Agent's real-time signal was never actually combined with what we
+    know about THIS student (Gap: "Media Agent is Isolated"). It now pulls
+    the same persistent Learner Profile + history (utils/agent_memory) that
+    the ReAct Media Agent uses, so the real-time decision and the student's
+    long-term profile are combined into one personalized response — instead
+    of the real-time signal being the only input.
 
     Cost: 1 GPT call per intervention (not per frame). Interventions happen at most
     every 12 seconds when needed — much cheaper than old approach.
@@ -1953,19 +3200,28 @@ async def agent_generate_content(body: ContentGenerateRequest, current=Depends(g
     question_ctx = f"Student's original question (keep answering THIS): {body.last_question}" if body.last_question else ""
     answer_ctx   = f"Previous tutor answer: {body.last_answer}"  if body.last_answer  else ""
 
+    try:
+        memory_context = get_memory_context(current["email"], body.subject)
+    except Exception:
+        memory_context = ""
+
     system = (
         "You are a warm, patient AI tutor for autistic children aged 8–12. "
         "Never say 'you look confused' or label the student's feelings. "
         "Be supportive, use simple language, emojis are encouraged. "
         "Always stay on the student's original question and current subject. "
-        "When asked for brevity, obey strictly — shorter is better."
+        "When asked for brevity, obey strictly — shorter is better.\n\n"
+        f"{memory_context}\n"
+        "Use this student's known profile and history above to shape HOW you explain — "
+        "e.g. lean on their preferred modality/language, avoid strategies that already "
+        "failed for them, and match the explanation style they told us they prefer."
     )
     user_msg = f"{subject_ctx}\n\n{action_prompt}\n\n{question_ctx}\n{answer_ctx}".strip()
 
     def _gen():
         from openai import OpenAI
         client = OpenAI()
-        max_tokens = 350 if action == "SHOW_FLOWCHART_STEPS" else (120 if action == "SIMPLIFY_EXPLANATION" else 80)
+        max_tokens = 350 if action in ("SHOW_FLOWCHART_STEPS", "STEP_BY_STEP_ONLY") else (200 if action in ("SIMPLIFY_EXPLANATION", "SIMPLE_TEXT_ONLY") else 80)
         resp = client.chat.completions.create(
             model="gpt-4o-mini",
             messages=[
@@ -1987,13 +3243,40 @@ class StepMcqsRequest(BaseModel):
     last_question: str = ""
     last_answer: str = ""
     adaptation_content: str = ""
-    mode: str = "default"  # "default" | "teaching"
+    mode: str = "default"  # "default" | "teaching" | "appreciation" | "revision"
+    activity: str = "one_question"  # revision only: one_question | matching | step_recap | fill_blank
+
+
+@app.get("/api/agent/revision-check")
+async def agent_revision_check(
+    subject: str,
+    topic: str = "",
+    current=Depends(get_current_user),
+):
+    """
+    Gap 5 — Adaptive Revision: should we offer a revision activity for this
+    topic/subject? Returns needed=False when memory shows no struggle signals
+    (doc: skip revision and proceed normally).
+    """
+    result = await run_in_thread(
+        evaluate_revision_need,
+        current["email"],
+        subject,
+        topic,
+    )
+    return result
 
 
 @app.post("/api/agent/step-mcqs")
 async def agent_step_mcqs(body: StepMcqsRequest, current=Depends(get_current_user)):
     """Easy step-by-step MCQs — recall check or teaching ladder with hints."""
     subject_ctx = _subject_guard(body.subject)
+    memory_ctx = ""
+    try:
+        memory_ctx = get_memory_context(current["email"], body.subject)
+    except Exception:
+        pass
+
     if body.mode == "appreciation":
         user_msg = (
             f"{subject_ctx}\n\n"
@@ -2026,6 +3309,44 @@ async def agent_step_mcqs(body: StepMcqsRequest, current=Depends(get_current_use
         system_msg = (
             "You create gentle step-by-step teaching MCQs for children aged 8–12 with autism. "
             "Output JSON only. Same topic as the student's question."
+        )
+    elif body.mode == "revision":
+        activity = body.activity if body.activity in REVISION_ACTIVITIES else "one_question"
+        mem_block = f"\n\nStudent memory (use to tailor difficulty, NOT to ask about old sessions):\n{memory_ctx}\n" if memory_ctx else ""
+        activity_specs = {
+            "one_question": (
+                "Create exactly 1 VERY EASY quiz question about the CURRENT topic only "
+                "(the student's question below). Do NOT ask 'do you remember last time'. "
+                "Max 12 words per question, max 6 words per option."
+            ),
+            "matching": (
+                "Create 2 VERY EASY matching-style MCQs about the CURRENT topic. "
+                "Each question pairs two related ideas (e.g. term → meaning). "
+                "Max 12 words per question, max 6 words per option."
+            ),
+            "step_recap": (
+                "Create 2 to 3 VERY EASY step-by-step recap MCQs about the CURRENT topic only, "
+                "one small step at a time. Max 14 words per question, max 7 words per option."
+            ),
+            "fill_blank": (
+                "Create 1 to 2 VERY EASY fill-in-the-blank style MCQs about the CURRENT topic. "
+                "Use '___' in the question text. Max 14 words per question, max 6 words per option."
+            ),
+        }
+        user_msg = (
+            f"{subject_ctx}{mem_block}\n\n"
+            f"Student question (CURRENT topic): {body.last_question}\n"
+            f"Tutor answer summary: {body.last_answer[:800]}\n\n"
+            f"Revision activity type: {activity}\n"
+            f"{activity_specs[activity]}\n"
+            "wrong_hint: 2 short kind hint lines. "
+            'Return ONLY valid JSON: '
+            '{"questions":[{"step_label":"Quick check","question":"...","options":["A","B","C"],"correct_index":0,"wrong_hint":"Nice try!\\nLook at the answer above."}]}'
+        )
+        system_msg = (
+            "You create adaptive revision quizzes for children aged 8–12. "
+            "Only quiz the CURRENT question topic — never generic 'what did you study last session'. "
+            "Output JSON only."
         )
     else:
         user_msg = (
@@ -2142,9 +3463,10 @@ async def agent_session_summary(body: SessionSummaryRequest, current=Depends(get
 
 class RecordAdaptationPrefRequest(BaseModel):
     subject: str
-    adaptation: str  # step_by_step | read_aloud | image | mcq_recall | breathing
+    adaptation: str  # step_by_step | read_aloud | image | mcq_recall | breathing | simple_text
     via: str = "popup_yes"
     happy_cv: bool = False
+    expression: str | None = None  # Media Agent's dominant CV label at feedback time
 
 
 @app.post("/api/agent/record-adaptation-preference")
@@ -2160,31 +3482,74 @@ async def agent_record_adaptation_preference(
         body.adaptation,
         via=body.via,
         happy_cv=body.happy_cv,
+        expression=body.expression,
     )
     order = await run_in_thread(
         get_adaptation_ladder_order,
         current["email"],
         body.subject,
     )
-    return {"ok": True, "ladder_order": order}
+    preferred_modality = await run_in_thread(
+        get_current_preferred_modality,
+        current["email"],
+        body.subject,
+    )
+    return {"ok": True, "ladder_order": order, "preferred_modality": preferred_modality}
+
+
+class RecordAdaptationFailureRequest(BaseModel):
+    subject: str
+    adaptation: str  # step_by_step | read_aloud | image | mcq_recall | breathing | simple_text
+    expression: str | None = None  # Media Agent's dominant CV label at feedback time
+
+
+@app.post("/api/agent/record-adaptation-failure")
+async def agent_record_adaptation_failure(
+    body: RecordAdaptationFailureRequest,
+    current=Depends(get_current_user),
+):
+    """
+    Save that a help step was shown but did NOT resolve the student's confusion
+    (they moved past it on the ladder). Gap #5 — "No Learning From Feedback":
+    without this, the system only ever remembered what worked, so a strategy
+    that consistently failed for a student kept getting tried again.
+    """
+    await run_in_thread(
+        record_adaptation_failure,
+        current["email"],
+        body.subject,
+        body.adaptation,
+        expression=body.expression,
+    )
+    order = await run_in_thread(
+        get_adaptation_ladder_order,
+        current["email"],
+        body.subject,
+    )
+    preferred_modality = await run_in_thread(
+        get_current_preferred_modality,
+        current["email"],
+        body.subject,
+    )
+    return {"ok": True, "ladder_order": order, "preferred_modality": preferred_modality}
 
 
 @app.get("/api/agent/adaptation-ladder")
 async def agent_adaptation_ladder(subject: str, current=Depends(get_current_user)):
     """Personalized help-ladder order for this student + subject."""
+    from utils.agent_memory import get_current_preferred_modality
+
     order = await run_in_thread(
         get_adaptation_ladder_order,
         current["email"],
         subject,
     )
-    from utils.agent_memory import get_preferred_adaptation
-
-    preferred = await run_in_thread(
-        get_preferred_adaptation,
+    preferred_modality = await run_in_thread(
+        get_current_preferred_modality,
         current["email"],
         subject,
     )
-    return {"ladder_order": order, "preferred_adaptation": preferred}
+    return {"ladder_order": order, "preferred_modality": preferred_modality}
 
 
 @app.get("/api/agent/memory")

@@ -18,9 +18,17 @@ env/
 .streamlit/secrets.toml
 .streamlit/*.txt
 
-# Data files (sessions, chats - these are temporary)
+# FastAPI / AutiStudy secrets (OpenAI key, Gmail App Password — NEVER commit)
+config/secrets.toml
+.env
+.env.*
+
+# Data files (sessions, chats, OTP hashes — temporary / sensitive)
 data/sessions.json
 data/chats.json
+data/email_otps.json
+data/invite_rate_limits.json
+data/parent_sessions.json
 
 # Keep users.json - contains registered accounts
 

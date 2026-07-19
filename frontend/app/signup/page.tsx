@@ -1,12 +1,12 @@
-"use client";
+﻿"use client";
 
-import { FormEvent, Suspense, useEffect, useState } from "react";
+import { FormEvent, Suspense, useEffect, useState, useCallback } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import {
-  AlertCircle, CreditCard, GraduationCap, Lock, Mail,
-  User, Users, Eye, EyeOff, KeyRound, CheckCircle2,
+  AlertCircle, GraduationCap, Lock, Mail,
+  User, Eye, EyeOff, CheckCircle2,
 } from "lucide-react";
 import { NavBar } from "@/components/layout/NavBar";
 import { Footer } from "@/components/layout/Footer";
@@ -14,7 +14,13 @@ import { DancingButton } from "@/components/primitives/DancingButton";
 import { useLocale } from "@/lib/i18n/LocaleProvider";
 import { useAuth } from "@/lib/auth/AuthProvider";
 import { resolveReturnUrl, clearReturnUrl } from "@/lib/auth/redirect";
-import { ApiError, parentApi, saveSession, setParentToken } from "@/lib/api/client";
+import {
+  ApiError,
+  authVerifyApi,
+  parentApi,
+  saveSession,
+  setParentToken,
+} from "@/lib/api/client";
 import { validateEmail } from "@/lib/validation/email";
 
 export default function SignupPage() {
@@ -36,7 +42,7 @@ function SignupInner() {
   const nextUrl = resolveReturnUrl(search?.get("next"));
 
   useEffect(() => {
-    if (!authLoading && isAuthenticated && !sessionStorage.getItem("autistudy_show_family_code")) {
+    if (!authLoading && isAuthenticated) {
       router.replace(nextUrl);
     }
   }, [authLoading, isAuthenticated, nextUrl, router]);
@@ -60,8 +66,11 @@ function SignupInner() {
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -10 }}
-                className="rounded-3xl glass-strong p-8 md:p-10 shadow-deep text-center"
+                className="rounded-3xl glass-strong p-8 md:p-10 shadow-soft text-center"
               >
+                <p className="font-display text-sm font-bold uppercase tracking-[0.18em] text-glacier-600 mb-2">
+                  AutiStudy
+                </p>
                 <h1 className="font-display text-3xl md:text-4xl font-extrabold text-deep mb-2">
                   Join AutiStudy
                 </h1>
@@ -113,7 +122,7 @@ function SignupInner() {
   );
 }
 
-// ── Child signup form ─────────────────────────────────────────────────────────
+// ── Child signup form (V6: email OTP, no CNIC) ────────────────────────────────
 
 function ChildSignupForm({
   onBack, refresh, nextUrl, router,
@@ -123,92 +132,105 @@ function ChildSignupForm({
   nextUrl: string;
   router: ReturnType<typeof useRouter>;
 }) {
+  const [step, setStep] = useState<"form" | "otp">("form");
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [grade, setGrade] = useState(4);
-  const [childCnic, setChildCnic] = useState("");
-  const [parentName, setParentName] = useState("");
-  const [parentCnic, setParentCnic] = useState("");
+  const [otp, setOtp] = useState("");
+  const [devOtp, setDevOtp] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [familyCode, setFamilyCode] = useState<string | null>(null);
-
-  const formatCnic = (val: string) => {
-    const digits = val.replace(/\D/g, "").slice(0, 13);
-    if (digits.length <= 5) return digits;
-    if (digits.length <= 12) return `${digits.slice(0, 5)}-${digits.slice(5)}`;
-    return `${digits.slice(0, 5)}-${digits.slice(5, 12)}-${digits.slice(12)}`;
-  };
+  const [info, setInfo] = useState<string | null>(null);
+  const [cooldownSec, setCooldownSec] = useState(0);
+  const [expiresInSec, setExpiresInSec] = useState<number | null>(null);
 
   const onSubmit = async (e: FormEvent) => {
     e.preventDefault();
     setError(null);
+    setInfo(null);
     const emailErr = validateEmail(email);
     if (emailErr) {
       setError(emailErr);
       return;
     }
-    const rawCnic = childCnic.replace(/\D/g, "");
-    if (rawCnic.length !== 13) {
-      setError("Please enter your complete 13-digit CNIC.");
-      return;
-    }
-    const rawParentCnic = parentCnic.replace(/\D/g, "");
-    if (rawParentCnic.length !== 13) {
-      setError("Please enter your parent or guardian's complete 13-digit CNIC.");
-      return;
-    }
-    if (!parentName.trim()) {
-      setError("Please enter your parent or guardian's name.");
-      return;
-    }
     setSubmitting(true);
     try {
-      const res = await parentApi.childSignup({
-        name, email, password, grade,
-        cnic: rawCnic,
-        parent_name: parentName.trim(),
-        parent_cnic: rawParentCnic,
-      });
-      saveSession(res.token, res.user);
-      const code = res.family_code ?? res.user.family_code ?? null;
-      if (code) {
-        sessionStorage.setItem("autistudy_show_family_code", code);
-      }
-      await refresh();
-      setFamilyCode(code);
+      const res = await parentApi.childSignup({ name, email, password, grade });
+      setDevOtp(res.dev_mode ? (res.dev_otp ?? null) : null);
+      setCooldownSec(res.retry_after_sec ?? 60);
+      setExpiresInSec(res.expires_in_sec ?? 15 * 60);
+      setInfo(null);
+      setStep("otp");
     } catch (err) {
       setError(err instanceof ApiError ? err.detail : "Signup failed. Please try again.");
+    } finally {
       setSubmitting(false);
     }
   };
 
-  const continueToApp = () => {
-    sessionStorage.removeItem("autistudy_show_family_code");
-    clearReturnUrl();
-    router.push(nextUrl);
+  const onVerify = async (e: FormEvent) => {
+    e.preventDefault();
+    setError(null);
+    setInfo(null);
+    setSubmitting(true);
+    try {
+      const res = await authVerifyApi.verifyEmail({
+        email,
+        code: otp.trim(),
+        role: "child",
+      });
+      if ("token" in res && res.token) {
+        saveSession(res.token, res.user as Parameters<typeof saveSession>[1]);
+        await refresh();
+        clearReturnUrl();
+        router.push(nextUrl);
+      }
+    } catch (err) {
+      setError(err instanceof ApiError ? err.detail : "Verification failed.");
+      setOtp("");
+      setSubmitting(false);
+    }
   };
 
-  if (familyCode) {
+  const onResend = useCallback(async () => {
+    if (cooldownSec > 0) return;
+    setError(null);
+    setInfo(null);
+    try {
+      const res = await authVerifyApi.resendOtp({ email, role: "child" });
+      setDevOtp(res.dev_mode ? (res.dev_otp ?? null) : null);
+      setCooldownSec(res.retry_after_sec ?? 60);
+      setExpiresInSec(res.expires_in_sec ?? 15 * 60);
+      setInfo("New code sent — check your inbox and Spam folder.");
+      setOtp("");
+    } catch (err) {
+      if (err instanceof ApiError) {
+        if (err.retryAfterSec) setCooldownSec(err.retryAfterSec);
+        setError(err.detail);
+      } else {
+        setError("Could not resend code.");
+      }
+    }
+  }, [cooldownSec, email]);
+
+  if (step === "otp") {
     return (
-      <div className="rounded-3xl glass-strong p-8 md:p-10 shadow-deep text-center">
-        <div className="text-4xl mb-4">🎉</div>
-        <h1 className="font-display text-2xl font-extrabold text-deep mb-2">Account created!</h1>
-        <p className="text-sm text-deep-soft mb-6">
-          Share this family code with your parent so they can link to your account:
-        </p>
-        <div className="rounded-2xl bg-glacier-50 border-2 border-glacier-300 px-6 py-5 mb-6">
-          <p className="text-xs font-bold text-deep-soft uppercase tracking-wider mb-1">Family code</p>
-          <p className="font-mono text-4xl font-extrabold text-glacier-700 tracking-[0.3em]">{familyCode}</p>
-        </div>
-        <p className="text-xs text-deep-muted mb-6 px-2">
-          Your parent will need this code plus your name, CNIC, and the parent details you entered.
-        </p>
-        <DancingButton type="button" variant="primary" fullWidth onClick={continueToApp}>
-          Continue to dashboard
-        </DancingButton>
-      </div>
+      <OtpPanel
+        email={email}
+        otp={otp}
+        setOtp={setOtp}
+        devOtp={devOtp}
+        error={error}
+        info={info}
+        submitting={submitting}
+        cooldownSec={cooldownSec}
+        setCooldownSec={setCooldownSec}
+        expiresInSec={expiresInSec}
+        onSubmit={onVerify}
+        onResend={onResend}
+        onBack={() => setStep("form")}
+      />
     );
   }
 
@@ -225,7 +247,7 @@ function ChildSignupForm({
           <span className="text-2xl">🎒</span>
           <div>
             <h1 className="font-display text-2xl font-extrabold text-deep leading-tight">Student Sign Up</h1>
-            <p className="text-xs text-deep-soft">Create your learning account</p>
+            <p className="text-xs text-deep-soft">We&apos;ll verify your email next</p>
           </div>
         </div>
       </div>
@@ -236,57 +258,8 @@ function ChildSignupForm({
         <PasswordField value={password} onChange={setPassword} />
         <GradeSelect value={grade} onChange={setGrade} />
 
-        <div>
-          <label className="block">
-            <div className="relative">
-              <span className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-deep-muted">
-                <CreditCard size={18} />
-              </span>
-              <input
-                type="text"
-                inputMode="numeric"
-                placeholder="Your CNIC (e.g. 35201-1234567-1)"
-                value={childCnic}
-                onChange={(e) => setChildCnic(formatCnic(e.target.value))}
-                required
-                maxLength={15}
-                className="w-full rounded-2xl bg-white/70 border border-glacier-200/60 pl-12 pr-4 py-3.5 text-deep placeholder:text-deep-muted focus:outline-none focus:ring-4 focus:ring-glacier-300/40 focus:border-glacier-400 transition-all font-mono tracking-widest"
-              />
-            </div>
-          </label>
-          <p className="text-xs text-deep-muted mt-1.5 px-1">Your 13-digit national identity number</p>
-        </div>
-
-        <div className="pt-1">
-          <p className="text-sm font-bold text-deep-soft mb-2 px-1">Parent / guardian details</p>
-          <Field
-            icon={<Users size={18} />}
-            placeholder="Parent or guardian full name"
-            type="text"
-            value={parentName}
-            onChange={setParentName}
-            required
-            autoComplete="name"
-          />
-          <div className="mt-3">
-            <label className="block">
-              <div className="relative">
-                <span className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-deep-muted">
-                  <CreditCard size={18} />
-                </span>
-                <input
-                  type="text"
-                  inputMode="numeric"
-                  placeholder="Parent CNIC (e.g. 35201-1234567-1)"
-                  value={parentCnic}
-                  onChange={(e) => setParentCnic(formatCnic(e.target.value))}
-                  required
-                  maxLength={15}
-                  className="w-full rounded-2xl bg-white/70 border border-glacier-200/60 pl-12 pr-4 py-3.5 text-deep placeholder:text-deep-muted focus:outline-none focus:ring-4 focus:ring-glacier-300/40 focus:border-glacier-400 transition-all font-mono tracking-widest"
-                />
-              </div>
-            </label>
-          </div>
+        <div className="rounded-2xl bg-glacier-50/80 border border-glacier-300/60 px-4 py-3 text-xs text-glacier-700">
+          After signup you&apos;ll enter a code from your email. You can invite a parent later from your dashboard.
         </div>
 
         {error && (
@@ -303,7 +276,7 @@ function ChildSignupForm({
 
         <div className="pt-2">
           <DancingButton type="submit" variant="primary" fullWidth disabled={submitting} className={submitting ? "opacity-80 cursor-wait" : ""}>
-            {submitting ? "Creating account…" : "Create Student Account"}
+            {submitting ? "Sending code…" : "Continue"}
           </DancingButton>
         </div>
       </form>
@@ -316,63 +289,112 @@ function ChildSignupForm({
   );
 }
 
-// ── Parent signup form ────────────────────────────────────────────────────────
+// ── Parent signup form (V6: email OTP, then invite code on dashboard) ──────────
 
 function ParentSignupForm({ onBack, router }: { onBack: () => void; router: ReturnType<typeof useRouter> }) {
+  const [step, setStep] = useState<"form" | "otp">("form");
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [cnic, setCnic] = useState("");
-  const [childName, setChildName] = useState("");
-  const [childCnic, setChildCnic] = useState("");
-  const [familyCode, setFamilyCode] = useState("");
+  const [relationship, setRelationship] = useState<"father" | "mother" | "">("");
+  const [otp, setOtp] = useState("");
+  const [devOtp, setDevOtp] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-
-  const formatCnic = (val: string) => {
-    const digits = val.replace(/\D/g, "").slice(0, 13);
-    if (digits.length <= 5) return digits;
-    if (digits.length <= 12) return `${digits.slice(0, 5)}-${digits.slice(5)}`;
-    return `${digits.slice(0, 5)}-${digits.slice(5, 12)}-${digits.slice(12)}`;
-  };
+  const [info, setInfo] = useState<string | null>(null);
+  const [cooldownSec, setCooldownSec] = useState(0);
+  const [expiresInSec, setExpiresInSec] = useState<number | null>(null);
 
   const onSubmit = async (e: FormEvent) => {
     e.preventDefault();
     setError(null);
+    setInfo(null);
     const emailErr = validateEmail(email);
     if (emailErr) {
       setError(emailErr);
       return;
     }
-    const rawCnic = cnic.replace(/\D/g, "");
-    if (rawCnic.length !== 13) {
-      setError("Please enter your complete 13-digit CNIC.");
-      return;
-    }
-    const rawChildCnic = childCnic.replace(/\D/g, "");
-    if (rawChildCnic.length !== 13) {
-      setError("Please enter your child's complete 13-digit CNIC.");
-      return;
-    }
-    const rawFamilyCode = familyCode.replace(/\D/g, "");
-    if (rawFamilyCode.length !== 6) {
-      setError("Please enter the 6-digit family code from your child's signup.");
+    if (relationship !== "father" && relationship !== "mother") {
+      setError("Please choose whether you are the child’s Father or Mother.");
       return;
     }
     setSubmitting(true);
     try {
-      const res = await parentApi.signup({
-        name, email, password, cnic: rawCnic,
-        child_name: childName, child_cnic: rawChildCnic,
-        family_code: rawFamilyCode,
-      });
-      setParentToken(res.token);
-      router.push("/parent/dashboard");
+      const res = await parentApi.signup({ name, email, password, relationship });
+      setDevOtp(res.dev_mode ? (res.dev_otp ?? null) : null);
+      setCooldownSec(res.retry_after_sec ?? 60);
+      setExpiresInSec(res.expires_in_sec ?? 15 * 60);
+      setInfo(null);
+      setStep("otp");
     } catch (err) {
       setError(err instanceof ApiError ? err.detail : "Signup failed. Please try again.");
+    } finally {
       setSubmitting(false);
     }
   };
+
+  const onVerify = async (e: FormEvent) => {
+    e.preventDefault();
+    setError(null);
+    setInfo(null);
+    setSubmitting(true);
+    try {
+      const res = await authVerifyApi.verifyEmail({
+        email,
+        code: otp.trim(),
+        role: "parent",
+      });
+      if ("token" in res && res.token) {
+        setParentToken(res.token);
+        router.push("/parent/dashboard");
+      }
+    } catch (err) {
+      setError(err instanceof ApiError ? err.detail : "Verification failed.");
+      setOtp("");
+      setSubmitting(false);
+    }
+  };
+
+  const onResend = useCallback(async () => {
+    if (cooldownSec > 0) return;
+    setError(null);
+    setInfo(null);
+    try {
+      const res = await authVerifyApi.resendOtp({ email, role: "parent" });
+      setDevOtp(res.dev_mode ? (res.dev_otp ?? null) : null);
+      setCooldownSec(res.retry_after_sec ?? 60);
+      setExpiresInSec(res.expires_in_sec ?? 15 * 60);
+      setInfo("New code sent — check your inbox and Spam folder.");
+      setOtp("");
+    } catch (err) {
+      if (err instanceof ApiError) {
+        if (err.retryAfterSec) setCooldownSec(err.retryAfterSec);
+        setError(err.detail);
+      } else {
+        setError("Could not resend code.");
+      }
+    }
+  }, [cooldownSec, email]);
+
+  if (step === "otp") {
+    return (
+      <OtpPanel
+        email={email}
+        otp={otp}
+        setOtp={setOtp}
+        devOtp={devOtp}
+        error={error}
+        info={info}
+        submitting={submitting}
+        cooldownSec={cooldownSec}
+        setCooldownSec={setCooldownSec}
+        expiresInSec={expiresInSec}
+        onSubmit={onVerify}
+        onResend={onResend}
+        onBack={() => setStep("form")}
+      />
+    );
+  }
 
   return (
     <div className="rounded-3xl glass-strong p-8 md:p-10 shadow-deep">
@@ -387,7 +409,7 @@ function ParentSignupForm({ onBack, router }: { onBack: () => void; router: Retu
           <span className="text-2xl">👨‍👩‍👧</span>
           <div>
             <h1 className="font-display text-2xl font-extrabold text-deep leading-tight">Parent Sign Up</h1>
-            <p className="text-xs text-deep-soft">Link to your child's account</p>
+            <p className="text-xs text-deep-soft">Verify email, then enter your child&apos;s invite code</p>
           </div>
         </div>
       </div>
@@ -397,94 +419,41 @@ function ParentSignupForm({ onBack, router }: { onBack: () => void; router: Retu
         <Field icon={<Mail size={18} />} placeholder="Your email address" type="email" value={email} onChange={setEmail} required autoComplete="email" />
         <PasswordField value={password} onChange={setPassword} />
 
-        <div>
-          <label className="block">
-            <div className="relative">
-              <span className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-deep-muted">
-                <Users size={18} />
-              </span>
-              <input
-                type="text"
-                placeholder="Child's full name (as registered in AutiStudy)"
-                value={childName}
-                onChange={(e) => setChildName(e.target.value)}
-                required
-                className="w-full rounded-2xl bg-white/70 border border-glacier-200/60 pl-12 pr-4 py-3.5 text-deep placeholder:text-deep-muted focus:outline-none focus:ring-4 focus:ring-glacier-300/40 focus:border-glacier-400 transition-all"
-              />
-            </div>
-          </label>
-        </div>
-
-        <div>
-          <label className="block">
-            <div className="relative">
-              <span className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-deep-muted">
-                <CreditCard size={18} />
-              </span>
-              <input
-                type="text"
-                inputMode="numeric"
-                placeholder="Child's CNIC (13 digits)"
-                value={childCnic}
-                onChange={(e) => setChildCnic(formatCnic(e.target.value))}
-                required
-                maxLength={15}
-                className="w-full rounded-2xl bg-white/70 border border-glacier-200/60 pl-12 pr-4 py-3.5 text-deep placeholder:text-deep-muted focus:outline-none focus:ring-4 focus:ring-glacier-300/40 focus:border-glacier-400 transition-all font-mono tracking-widest"
-              />
-            </div>
-          </label>
-          <p className="text-xs text-deep-muted mt-1.5 px-1">Must match exactly what your child entered at signup</p>
-        </div>
-
-        <div>
-          <label className="block">
-            <div className="relative">
-              <span className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-deep-muted">
-                <KeyRound size={18} />
-              </span>
-              <input
-                type="text"
-                inputMode="numeric"
-                placeholder="Family code (6 digits from your child)"
-                value={familyCode}
-                onChange={(e) => setFamilyCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
-                required
-                maxLength={6}
-                className="w-full rounded-2xl bg-white/70 border border-glacier-200/60 pl-12 pr-4 py-3.5 text-deep placeholder:text-deep-muted focus:outline-none focus:ring-4 focus:ring-violet-300/40 focus:border-violet-400 transition-all font-mono tracking-[0.2em]"
-              />
-            </div>
-          </label>
-          <p className="text-xs text-deep-muted mt-1.5 px-1">Your child receives this code when they create their account</p>
-        </div>
-
-        <div>
-          <label className="block">
-            <div className="relative">
-              <span className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-deep-muted">
-                <CreditCard size={18} />
-              </span>
-              <input
-                type="text"
-                inputMode="numeric"
-                placeholder="Your CNIC (e.g. 35201-1234567-1)"
-                value={cnic}
-                onChange={(e) => setCnic(formatCnic(e.target.value))}
-                required
-                maxLength={15}
-                className="w-full rounded-2xl bg-white/70 border border-glacier-200/60 pl-12 pr-4 py-3.5 text-deep placeholder:text-deep-muted focus:outline-none focus:ring-4 focus:ring-violet-300/40 focus:border-violet-400 transition-all font-mono tracking-widest"
-              />
-            </div>
-          </label>
-          <p className="text-xs text-deep-muted mt-1.5 px-1">
-            Must match the parent CNIC your child entered at signup
+        <fieldset className="rounded-2xl border border-glacier-300/70 bg-glacier-50/50 px-4 py-3">
+          <legend className="px-1 text-sm font-bold text-deep">
+            Are you the child’s father or mother?
+          </legend>
+          <p className="text-xs text-deep-soft mb-3 leading-relaxed">
+            Each child can link one Father and one Mother (biological or step-parent).
           </p>
-        </div>
+          <div className="grid grid-cols-2 gap-2">
+            {([
+              { value: "father" as const, label: "Father" },
+              { value: "mother" as const, label: "Mother" },
+            ]).map((opt) => (
+              <button
+                key={opt.value}
+                type="button"
+                onClick={() => setRelationship(opt.value)}
+                className={`rounded-xl border px-3 py-3 text-sm font-bold transition-all ${
+                  relationship === opt.value
+                    ? "border-glacier-500 bg-glacier-600 text-white shadow-md"
+                    : "border-glacier-200 bg-white text-deep hover:border-glacier-400"
+                }`}
+              >
+                {opt.label}
+              </button>
+            ))}
+          </div>
+        </fieldset>
 
-        {/* Info box */}
-        <div className="rounded-2xl bg-violet-50/80 border border-violet-200/60 px-4 py-3 text-sm text-violet-700">
-          <p className="font-bold mb-0.5">How does this work?</p>
+        <div className="rounded-2xl bg-glacier-50/80 border border-glacier-300/60 px-4 py-3 text-sm text-glacier-700">
+          <p className="font-bold mb-0.5">How linking works</p>
           <p className="text-xs leading-relaxed">
-            Your child signs up first with their details and your name and CNIC. They receive a 6-digit family code to share with you. Enter that code here along with matching details to link your account.
+            1) Your child creates a Family Invitation Code (e.g. FAM-82K7Q) from Settings → Family.
+            2) You verify this email, then enter that code.
+            3) Your child Approves the request — then you can see their progress.
+            You can link more than one child to this parent account.
           </p>
         </div>
 
@@ -502,7 +471,7 @@ function ParentSignupForm({ onBack, router }: { onBack: () => void; router: Retu
 
         <div className="pt-2">
           <DancingButton type="submit" variant="primary" fullWidth disabled={submitting} className={submitting ? "opacity-80 cursor-wait" : ""}>
-            {submitting ? "Verifying…" : "Create Parent Account"}
+            {submitting ? "Sending code…" : "Continue"}
           </DancingButton>
         </div>
       </form>
@@ -512,6 +481,213 @@ function ParentSignupForm({ onBack, router }: { onBack: () => void; router: Retu
         <Link href="/login" className="font-bold text-glacier-700 hover:text-deep">Log in</Link>
       </p>
     </div>
+  );
+}
+
+function classifyOtpError(message: string | null): "wrong" | "expired" | "locked" | "other" | null {
+  if (!message) return null;
+  const m = message.toLowerCase();
+  if (m.includes("too many incorrect") || m.includes("too many tries")) return "locked";
+  if (m.includes("expired") || m.includes("no code found")) return "expired";
+  if (m.includes("incorrect") || m.includes("attempt")) return "wrong";
+  return "other";
+}
+
+function isGmailAddress(email: string): boolean {
+  const e = email.trim().toLowerCase();
+  return e.endsWith("@gmail.com") || e.endsWith("@googlemail.com");
+}
+
+function OtpPanel({
+  email,
+  otp,
+  setOtp,
+  devOtp,
+  error,
+  info,
+  submitting,
+  cooldownSec,
+  setCooldownSec,
+  expiresInSec,
+  onSubmit,
+  onResend,
+  onBack,
+}: {
+  email: string;
+  otp: string;
+  setOtp: (v: string) => void;
+  devOtp: string | null;
+  error: string | null;
+  info: string | null;
+  submitting: boolean;
+  cooldownSec: number;
+  setCooldownSec: (n: number | ((prev: number) => number)) => void;
+  expiresInSec: number | null;
+  onSubmit: (e: FormEvent) => void;
+  onResend: () => void | Promise<void>;
+  onBack: () => void;
+}) {
+  const [resending, setResending] = useState(false);
+  const [otpInputEl, setOtpInputEl] = useState<HTMLInputElement | null>(null);
+  const gmail = isGmailAddress(email);
+  const errorKind = classifyOtpError(error);
+  const needsResend = errorKind === "expired" || errorKind === "locked";
+
+  useEffect(() => {
+    otpInputEl?.focus();
+  }, [otpInputEl]);
+
+  useEffect(() => {
+    if (cooldownSec <= 0) return;
+    const id = window.setInterval(() => {
+      setCooldownSec((prev) => (prev > 0 ? prev - 1 : 0));
+    }, 1000);
+    return () => window.clearInterval(id);
+  }, [cooldownSec > 0, setCooldownSec]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const handleResend = async () => {
+    if (cooldownSec > 0 || resending) return;
+    setResending(true);
+    try {
+      await onResend();
+      otpInputEl?.focus();
+    } finally {
+      setResending(false);
+    }
+  };
+
+  const expireMins =
+    expiresInSec != null && expiresInSec > 0
+      ? Math.max(1, Math.ceil(expiresInSec / 60))
+      : null;
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 12 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.3, ease: "easeOut" }}
+      className="rounded-3xl glass-strong p-8 md:p-10 shadow-deep"
+    >
+      <button
+        type="button"
+        onClick={onBack}
+        className="mb-5 flex h-9 w-9 items-center justify-center rounded-xl bg-white/60 border border-glacier-200 text-deep-soft hover:text-deep"
+        aria-label="Back"
+      >
+        ←
+      </button>
+
+      <motion.div
+        initial={{ scale: 0.9, opacity: 0 }}
+        animate={{ scale: 1, opacity: 1 }}
+        transition={{ delay: 0.05, type: "spring", stiffness: 260, damping: 20 }}
+        className="mx-auto mb-5 flex h-14 w-14 items-center justify-center rounded-2xl bg-glacier-100 text-glacier-700"
+      >
+        <Mail size={28} strokeWidth={2.25} />
+      </motion.div>
+
+      <h1 className="font-display text-2xl md:text-[1.7rem] font-extrabold text-deep text-center leading-tight">
+        {gmail ? "Check your Gmail" : "Check your email"}
+      </h1>
+      <p className="mt-2 text-sm text-deep-soft text-center leading-relaxed">
+        We sent a 6-digit verification code to
+      </p>
+      <p className="mt-1.5 text-center text-sm font-bold text-deep break-all px-1">
+        {email}
+      </p>
+      <p className="mt-3 text-center text-xs text-deep-muted leading-relaxed">
+        Don&apos;t see it? Check your <strong className="font-semibold text-deep-soft">Spam</strong> or{" "}
+        <strong className="font-semibold text-deep-soft">Promotions</strong> folder.
+        {expireMins != null ? ` Code expires in about ${expireMins} minutes.` : ""}
+      </p>
+
+      {devOtp && (
+        <div className="mt-5 rounded-2xl bg-amber-50 border border-amber-200 px-4 py-3 text-sm text-amber-900">
+          <strong>Dev mode:</strong> SMTP not configured — use code{" "}
+          <span className="font-mono font-extrabold tracking-widest">{devOtp}</span>
+        </div>
+      )}
+
+      <form className="mt-7 space-y-4" onSubmit={onSubmit}>
+        <label className="block">
+          <span className="sr-only">Verification code</span>
+          <input
+            ref={setOtpInputEl}
+            type="text"
+            inputMode="numeric"
+            autoComplete="one-time-code"
+            placeholder="••••••"
+            value={otp}
+            onChange={(e) => {
+              setOtp(e.target.value.replace(/\D/g, "").slice(0, 6));
+            }}
+            maxLength={6}
+            required
+            aria-invalid={Boolean(error)}
+            className={`w-full rounded-2xl bg-white/70 border px-4 py-3.5 text-center text-2xl font-mono tracking-[0.45em] text-deep focus:outline-none focus:ring-4 transition-shadow ${
+              error
+                ? "border-rose-300 focus:ring-rose-200/50"
+                : "border-glacier-200/60 focus:ring-glacier-300/40"
+            }`}
+          />
+        </label>
+
+        {info && !error && (
+          <motion.div
+            initial={{ opacity: 0, y: -4 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="flex items-start gap-2 rounded-2xl bg-emerald-50/90 border border-emerald-200/70 px-4 py-3 text-sm text-emerald-800"
+            role="status"
+          >
+            <CheckCircle2 size={18} className="mt-0.5 flex-shrink-0" />
+            <span>{info}</span>
+          </motion.div>
+        )}
+
+        {error && (
+          <motion.div
+            key={error}
+            initial={{ opacity: 0, x: -6 }}
+            animate={{ opacity: 1, x: 0 }}
+            className="flex items-start gap-2 rounded-2xl bg-rose-50/80 border border-rose-200/60 px-4 py-3 text-sm text-rose-700"
+            role="alert"
+          >
+            <AlertCircle size={18} className="mt-0.5 flex-shrink-0" />
+            <span>
+              {error}
+              {needsResend && cooldownSec <= 0 ? " " : ""}
+            </span>
+          </motion.div>
+        )}
+
+        <DancingButton type="submit" variant="primary" fullWidth disabled={submitting || otp.length !== 6}>
+          {submitting ? "Verifying…" : "Verify & continue"}
+        </DancingButton>
+      </form>
+
+      <button
+        type="button"
+        onClick={handleResend}
+        disabled={cooldownSec > 0 || resending}
+        className={`mt-5 w-full text-center text-sm font-bold transition-colors ${
+          cooldownSec > 0 || resending
+            ? "text-deep-muted cursor-not-allowed"
+            : "text-glacier-700 hover:text-deep"
+        }`}
+      >
+        {resending
+          ? "Sending new code…"
+          : cooldownSec > 0
+            ? `Resend code in ${cooldownSec}s`
+            : needsResend
+              ? "Resend a new code"
+              : "Resend code"}
+      </button>
+
+      <p className="mt-3 text-center text-xs text-deep-muted">
+        Wrong email? Go back and sign up again with the correct address.
+      </p>
+    </motion.div>
   );
 }
 
@@ -584,7 +760,7 @@ function getStrengthLevel(rules: PasswordRule[]): { score: number; label: string
   if (score <= 1) return { score, label: "Very weak",  color: "bg-rose-500" };
   if (score === 2) return { score, label: "Weak",       color: "bg-orange-500" };
   if (score === 3) return { score, label: "Fair",       color: "bg-amber-500" };
-  if (score === 4) return { score, label: "Good",       color: "bg-sky-500" };
+  if (score === 4) return { score, label: "Good",       color: "bg-glacier-500" };
   return             { score, label: "Strong ✓",      color: "bg-emerald-500" };
 }
 

@@ -1081,7 +1081,85 @@ SUBJECT_KEYWORDS = {
 }
 
 
+def _extract_query_terms(query: str) -> List[str]:
+    """Significant words from the student's question (for chunk grounding)."""
+    words = re.findall(r"[a-zA-Z0-9]+", (query or "").lower())
+    stop = {
+        "what", "is", "are", "the", "a", "an", "how", "why", "when", "where",
+        "does", "do", "can", "could", "would", "should", "tell", "me", "about",
+        "explain", "define", "meaning", "of", "in", "for", "to", "and", "or",
+        "this", "that", "with", "from", "your", "you", "please", "question",
+        "work", "works",
+    }
+    return [w for w in words if w not in stop and len(w) >= 3]
+
+
+def _needs_topic_explanation(query: str) -> bool:
+    q = (query or "").lower()
+    return bool(
+        re.search(
+            r"\b(what is|what are|define|explain|meaning of|tell me about|"
+            r"how does|how do|why does|why do|describe)\b",
+            q,
+        )
+    )
+
+
+def _term_explained_in_text(term: str, text: str) -> bool:
+    """True when the chunk actually teaches the term — not a passing name-drop."""
+    if term not in text:
+        return False
+
+    if re.search(rf"\b{re.escape(term)}\s+(is|are|means|refers to)\b", text):
+        return True
+    if re.search(rf"\bwhat (is|are)\s+{re.escape(term)}\b", text):
+        return True
+    if text.count(term) >= 3:
+        return True
+
+    # Worksheet / comma-list name drops: "acid, benzene, methane"
+    if re.search(rf"\b[\w\s]{{0,40}}{re.escape(term)}\s*,\s*\w+", text):
+        return False
+    if re.search(rf"\w+\s*,\s*{re.escape(term)}\b", text) and text.count(term) <= 2:
+        if not re.search(rf"\b{re.escape(term)}\s+(is|are)\b", text):
+            return False
+
+    # Mentioned only as context for another concept: "soluble in benzene"
+    if re.search(rf"\b(?:in|into|with)\s+{re.escape(term)}\b", text) and text.count(term) <= 2:
+        if not re.search(rf"\b{re.escape(term)}\s+(is|are)\b", text):
+            return False
+
+    return False
+
+
+def _query_grounded_in_hits(query: str, hits: List[Dict], top_n: int = 4) -> bool:
+    """
+    True when retrieved chunks actually cover the student's topic.
+
+    For definition/explanation questions, the topic must be taught in a chunk —
+    not merely mentioned in an exercise list or as an example.
+    """
+    terms = _extract_query_terms(query)
+    if not terms:
+        return True
+
+    primary = max(terms, key=len)
+    needs_explanation = _needs_topic_explanation(query)
+
+    for h in hits[:top_n]:
+        text = (h.get("text") or "").lower()
+        if primary not in text:
+            continue
+        if not needs_explanation:
+            return True
+        if _term_explained_in_text(primary, text):
+            return True
+
+    return False
+
+
 def _decide_is_relevant(
+    query: str,
     hits: List[Dict],
     relevance_score: float,
     query_seems_related: bool,
@@ -1089,11 +1167,13 @@ def _decide_is_relevant(
     """
     Decide if retrieved chunks are textbook-grounded enough to tutor.
 
-    Pipelines already filter candidates (BM25 + keyword gate + rerank).
-    Default: trust retrieval unless scores are clearly bad — reduces false
-    "not in textbook" replies when wording differs from the book.
+    Requires the student's topic words to appear in at least one hit —
+    not just loosely related science/math chunks.
     """
     if not hits:
+        return False
+
+    if not _query_grounded_in_hits(query, hits):
         return False
 
     top = hits[0]
@@ -1202,7 +1282,7 @@ def query_knowledge_base(
     
     # Compute relevance score from retrieved hits
     relevance_score = compute_relevance_score(hits)
-    is_relevant = _decide_is_relevant(hits, relevance_score, quick_related)
+    is_relevant = _decide_is_relevant(query, hits, relevance_score, quick_related)
     threshold_note = (
         float(os.getenv("RAG_RELEVANCE_THRESHOLD", "0.18"))
         if quick_related

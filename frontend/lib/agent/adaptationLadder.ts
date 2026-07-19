@@ -1,7 +1,11 @@
 import type { AdaptationRound } from "@/lib/agent/TutorComprehensionFlow";
+import type { LearnerProfile } from "@/lib/api/client";
 
 /** Default help-ladder order (Option A — first answer stays text). */
 export const DEFAULT_ADAPTATION_ORDER: AdaptationRound[] = [1, 2, 3, 4, 5];
+
+/** Help rounds only — breathing (5) is always last after these fail. */
+export const HELP_ROUNDS: AdaptationRound[] = [1, 2, 3, 4];
 
 export type AdaptationModality =
   | "step_by_step"
@@ -42,4 +46,33 @@ export function normalizeLadderOrder(raw: unknown): AdaptationRound[] {
     if (!seen.has(n)) ordered.push(n);
   }
   return ordered;
+}
+
+/**
+ * Gap 7 — which modality to apply with the FIRST answer (before any 👎).
+ * Returns null when plain text + 👍/👎 is enough (text-only learners).
+ */
+export function resolveInitialRound(
+  profile: LearnerProfile | null,
+  ladderOrder: AdaptationRound[],
+): AdaptationRound | null {
+  if (!profile?.onboarding_completed) return null;
+
+  const style = profile.learning_style;
+  if (style === "visual") return 3;
+  if (style === "audio") return 2;
+  if (style === "text") {
+    if (profile.explanation_style === "step_by_step") return 1;
+    return null;
+  }
+
+  // mixed — use the top of the personalized ladder (excluding breathing)
+  const first = ladderOrder.find((r) => r >= 1 && r <= 4);
+  return first ?? null;
+}
+
+export function modalitiesFromRounds(rounds: Iterable<AdaptationRound>): string[] {
+  return [...rounds]
+    .map((r) => roundToModality(r))
+    .filter((m): m is AdaptationModality => !!m);
 }

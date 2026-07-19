@@ -24,11 +24,14 @@ export function PageShell({
           transition={{ duration: 0.6, ease: "easeOut" }}
           className="mx-auto max-w-5xl text-center"
         >
+          <p className="mb-3 font-display text-sm font-bold uppercase tracking-[0.2em] text-sky-600/90">
+            AutiStudy
+          </p>
           <h1 className="font-display text-4xl md:text-6xl font-extrabold tracking-tight text-deep text-balance">
             {title}
           </h1>
           {subtitle && (
-            <p className="mt-5 mx-auto max-w-2xl text-lg text-deep-soft">
+            <p className="mt-5 mx-auto max-w-2xl text-lg text-deep-soft leading-relaxed">
               {subtitle}
             </p>
           )}

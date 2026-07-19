@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
@@ -7,7 +7,13 @@ import {
   ArrowLeft, BookOpen, Brain, Calendar, RefreshCw, Settings, Star, Trophy,
 } from "lucide-react";
 import { useSettings } from "@/lib/settings/SettingsContext";
-import { ApiError, getParentToken, parentApi, setParentToken } from "@/lib/api/client";
+import {
+  ApiError,
+  getParentToken,
+  getSelectedChildEmail,
+  parentApi,
+  setParentToken,
+} from "@/lib/api/client";
 import { useLocale } from "@/lib/i18n/LocaleProvider";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -47,7 +53,7 @@ const SECTION_STYLES: Record<string, {
   emerald: {
     bg: "from-emerald-50 to-teal-50",
     border: "border-emerald-200",
-    icon: "from-emerald-500 to-teal-500",
+    icon: "from-mint-300 to-glacier-500",
     badge: "bg-emerald-100 text-emerald-700 border-emerald-200",
     dot: "bg-emerald-500",
   },
@@ -60,10 +66,10 @@ const SECTION_STYLES: Record<string, {
   },
   sky: {
     bg: "from-sky-50 to-cyan-50",
-    border: "border-sky-200",
-    icon: "from-sky-500 to-cyan-500",
-    badge: "bg-sky-100 text-sky-700 border-sky-200",
-    dot: "bg-sky-500",
+    border: "border-glacier-200",
+    icon: "from-glacier-500 to-deep",
+    badge: "bg-glacier-100 text-glacier-700 border-glacier-200",
+    dot: "bg-glacier-500",
   },
   rose: {
     bg: "from-rose-50 to-pink-50",
@@ -80,7 +86,7 @@ function getStyle(color: string) {
 
 const RATING_CONFIG: Record<string, { label: string; color: string; bg: string; emoji: string }> = {
   Excellent:       { label: "Excellent",      color: "text-emerald-700", bg: "from-emerald-400 to-teal-500",  emoji: "🏆" },
-  Good:            { label: "Good",           color: "text-sky-700",     bg: "from-sky-400 to-cyan-500",      emoji: "⭐" },
+  Good:            { label: "Good",           color: "text-glacier-700",     bg: "from-sky-400 to-cyan-500",      emoji: "⭐" },
   Developing:      { label: "Developing",     color: "text-amber-700",   bg: "from-amber-400 to-orange-500",  emoji: "📈" },
   "Needs Support": { label: "Needs Support",  color: "text-rose-700",    bg: "from-rose-400 to-pink-500",     emoji: "💙" },
 };
@@ -157,14 +163,14 @@ export default function ParentReportPage() {
     const token = getParentToken();
     if (!token) { router.push("/login"); return; }
 
-    parentApi.report()
+    parentApi.report(getSelectedChildEmail())
       .then(r => setReport(r as unknown as ReportData))
       .catch(e => {
         if (e instanceof ApiError && e.status === 401) { setParentToken(null); router.push("/login"); }
         else setError(e instanceof ApiError ? e.detail : pr.errorGeneric);
       })
       .finally(() => setLoading(false));
-  }, [router]);
+  }, [router, pr.errorGeneric]);
 
   const rating = report ? (RATING_CONFIG[report.overall_rating] ?? RATING_CONFIG["Good"]) : null;
 
@@ -185,7 +191,7 @@ export default function ParentReportPage() {
         </div>
         <div className="ml-auto flex items-center gap-2">
           {report && <span className="text-xs text-deep-muted hidden sm:block">{pr.generatedOn} {new Date(report.generated_at).toLocaleDateString()}</span>}
-          <button onClick={openSettings}
+          <button onClick={() => openSettings()}
             className="flex items-center gap-1.5 rounded-xl border border-violet-200 bg-violet-50 px-3 py-2 text-sm font-bold text-violet-700 hover:bg-violet-100 transition-all"
           >
             <Settings size={15} />
@@ -226,7 +232,14 @@ export default function ParentReportPage() {
             <h2 className="font-display text-xl font-extrabold text-deep mb-2">{pr.couldNotGenerate}</h2>
             <p className="text-rose-700 text-sm mb-5">{error}</p>
             <button
-              onClick={() => { setError(null); setLoading(true); parentApi.report().then(r => setReport(r as unknown as ReportData)).catch(e => setError(String(e))).finally(() => setLoading(false)); }}
+              onClick={() => {
+                setError(null);
+                setLoading(true);
+                parentApi.report(getSelectedChildEmail())
+                  .then(r => setReport(r as unknown as ReportData))
+                  .catch(e => setError(String(e)))
+                  .finally(() => setLoading(false));
+              }}
               className="rounded-xl bg-gradient-to-r from-violet-600 to-purple-600 px-5 py-2.5 text-white font-bold text-sm"
             >
               {pr.tryAgain}

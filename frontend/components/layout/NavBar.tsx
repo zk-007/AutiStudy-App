@@ -6,7 +6,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { useLocale } from "@/lib/i18n/LocaleProvider";
 import { useAuth } from "@/lib/auth/AuthProvider";
 import { DancingButton } from "@/components/primitives/DancingButton";
-import { Globe, LogOut, Trophy, BarChart3, Settings } from "lucide-react";
+import { Globe, LogOut, Trophy, BarChart3, Settings, BookOpen } from "lucide-react";
 import { useSettings } from "@/lib/settings/SettingsContext";
 import clsx from "clsx";
 
@@ -52,6 +52,14 @@ export function NavBar() {
         <div className={clsx("flex items-center gap-1 md:gap-2", isRTL && "flex-row-reverse")}>
           <NavLink href="/about">{t.nav.about}</NavLink>
           <NavLink href="/faq">{t.nav.faq}</NavLink>
+          <NavLink href="/contact">{t.nav.contact}</NavLink>
+          <Link
+            href="/manual"
+            className="hidden md:inline-flex items-center gap-1.5 rounded-full px-4 py-2 text-sm font-semibold text-deep-soft hover:bg-glacier-100 hover:text-deep transition-colors"
+          >
+            <BookOpen size={15} />
+            {locale === "ur" ? "رہنما" : "Manual"}
+          </Link>
 
           <button
             onClick={() => setLocale(locale === "en" ? "ur" : "en")}
@@ -64,8 +72,8 @@ export function NavBar() {
 
           {/* Settings — icon + label for clarity (especially for autistic users) */}
           <button
-            onClick={openSettings}
-            className="inline-flex items-center gap-1.5 rounded-full px-3 py-2 text-sm font-semibold text-deep-soft hover:bg-violet-50 hover:text-violet-600 border border-transparent hover:border-violet-200 transition-all"
+            onClick={() => openSettings()}
+            className="inline-flex items-center gap-1.5 rounded-full px-3 py-2 text-sm font-semibold text-deep-soft hover:bg-sky-50 hover:text-sky-700 border border-transparent hover:border-sky-200 transition-all"
             aria-label="Settings"
           >
             <Settings size={16} />

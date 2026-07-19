@@ -15,6 +15,9 @@ venv/
 # ── Secrets ───────────────────────────────────────────────────────────────────
 backend/config/secrets.toml
 backend/.streamlit/secrets.toml
+**/config/secrets.toml
+**/.streamlit/secrets.toml
+**/data/email_otps.json
 *.env
 .env
 
@@ -27,3 +30,5 @@ backend/data/agent_memory/
 .DS_Store
 Thumbs.db
 desktop.ini
+.vercel
+.env*

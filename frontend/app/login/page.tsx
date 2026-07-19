@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { Suspense, FormEvent, useEffect, useState } from "react";
 import Link from "next/link";
@@ -92,6 +92,9 @@ function LoginInner() {
                 exit={{ opacity: 0, y: -10 }}
                 className="rounded-3xl glass-strong p-8 md:p-10 shadow-deep text-center"
               >
+                <p className="font-display text-sm font-bold uppercase tracking-[0.18em] text-glacier-600 mb-2">
+                  AutiStudy
+                </p>
                 <h1 className="font-display text-3xl md:text-4xl font-extrabold text-deep mb-2">
                   Welcome Back
                 </h1>
@@ -170,6 +173,15 @@ function LoginInner() {
                     required
                     autoComplete="current-password"
                   />
+
+                  <div className="flex justify-end -mt-1">
+                    <Link
+                      href={`/forgot-password?role=${role}`}
+                      className="text-sm font-bold text-glacier-700 hover:text-deep transition-colors"
+                    >
+                      Forgot Password?
+                    </Link>
+                  </div>
 
                   {error && (
                     <motion.div

@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
@@ -15,18 +15,27 @@ import {
   PenLine,
   Star,
   BarChart3,
+  MessageCircle,
+  BookOpen,
+  Check,
 } from "lucide-react";
 import { NavBar } from "@/components/layout/NavBar";
 import { Footer } from "@/components/layout/Footer";
 import { useLocale } from "@/lib/i18n/LocaleProvider";
 import { useAuth } from "@/lib/auth/AuthProvider";
 import { loginUrlFor } from "@/lib/auth/redirect";
+import { AvatarDisplay } from "@/components/avatar/AvatarDisplay";
+import { LearnerJourneyTree } from "@/components/dashboard/LearnerJourneyTree";
+import { MoodCheckIn } from "@/components/dashboard/MoodCheckIn";
 import {
   userApi,
+  profileApi,
   type Stats,
   type Subject,
   type RecentChat,
   type RecentQuiz,
+  type DashboardExtras,
+  type MoodId,
   ApiError,
 } from "@/lib/api/client";
 
@@ -39,7 +48,11 @@ export default function DashboardPage() {
   const [subjects, setSubjects] = useState<Subject[] | null>(null);
   const [recentChats, setRecentChats] = useState<RecentChat[] | null>(null);
   const [recentQuizzes, setRecentQuizzes] = useState<RecentQuiz[] | null>(null);
+  const [dashExtras, setDashExtras] = useState<DashboardExtras | null>(null);
   const [dataError, setDataError] = useState<string | null>(null);
+  const [moodOpen, setMoodOpen] = useState(false);
+  const [moodSaving, setMoodSaving] = useState(false);
+  const moodPrompted = useRef(false);
 
   // ── Route guard: bounce to /login if not authenticated. We pass the
   //    current URL via `?next=` so the user comes straight back here
@@ -50,7 +63,31 @@ export default function DashboardPage() {
     }
   }, [authLoading, isAuthenticated, router]);
 
+  // ── Gap #2 (Persistent Learner Profile): first-ever visit to the dashboard,
+  //    send the student to the one-time learning-style onboarding instead.
+  //    Runs once per account — profileApi.get() reports onboarding_completed.
+  useEffect(() => {
+    if (!isAuthenticated) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const profile = await profileApi.get();
+        if (!cancelled && !profile.onboarding_completed) {
+          router.replace("/onboarding/learning-profile?next=/dashboard");
+        }
+      } catch {
+        // If the check fails, don't block the dashboard — just skip onboarding.
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [isAuthenticated, router]);
+
   // ── Fetch dashboard data once authenticated. ─────────────────────────────
+  // Core cards (stats / subjects / chats / quizzes) must NOT depend on the
+  // Part B #9 extras endpoint — a 404 there previously wiped the whole page
+  // via Promise.all rejection ("Not Found" + endless skeletons).
   useEffect(() => {
     if (!isAuthenticated) return;
     let cancelled = false;
@@ -67,16 +104,52 @@ export default function DashboardPage() {
         setSubjects(su);
         setRecentChats(rc);
         setRecentQuizzes(rq);
+        setDataError(null);
       } catch (err) {
         if (cancelled) return;
         if (err instanceof ApiError) setDataError(err.detail);
         else setDataError(t.auth.errors.generic);
+      }
+
+      try {
+        const dx = await userApi.dashboard();
+        if (cancelled) return;
+        setDashExtras(dx);
+        if (!moodPrompted.current && !dx.mood_today) {
+          moodPrompted.current = true;
+          setMoodOpen(true);
+        }
+      } catch {
+        // Extras are optional — keep subjects / resume / quizzes visible.
+        if (!cancelled) setDashExtras(null);
       }
     })();
     return () => {
       cancelled = true;
     };
   }, [isAuthenticated, t.auth.errors.generic]);
+
+  const handleMood = async (mood: MoodId) => {
+    setMoodSaving(true);
+    try {
+      const res = await userApi.saveMood(mood);
+      setDashExtras(res.dashboard);
+      setMoodOpen(false);
+    } catch {
+      // Keep modal open so they can retry or skip.
+    } finally {
+      setMoodSaving(false);
+    }
+  };
+
+  const handleToggleSchedule = async (itemId: string) => {
+    try {
+      const res = await userApi.toggleScheduleItem(itemId);
+      setDashExtras((prev) => (prev ? { ...prev, schedule: res.items } : prev));
+    } catch {
+      /* ignore — UI stays as-is */
+    }
+  };
 
   // ── Render states ────────────────────────────────────────────────────────
 
@@ -98,7 +171,14 @@ export default function DashboardPage() {
       <div className="px-6 md:px-10 pt-28 pb-16">
         <div className="mx-auto max-w-6xl">
           {/* ── Header: avatar + greeting ───────────────────────────── */}
-          {user && <DashHeader name={user.name} grade={user.grade} stars={stats?.stars ?? user.stars ?? 0} />}
+          {user && (
+            <DashHeader
+              name={user.name}
+              grade={user.grade}
+              stars={stats?.stars ?? user.stars ?? 0}
+              avatar={user.avatar}
+            />
+          )}
 
           {/* ── Error banner if backend hiccuped ────────────────────── */}
           {dataError && (
@@ -146,13 +226,30 @@ export default function DashboardPage() {
             />
           </div>
 
-          {/* ── Quick actions: Quiz + Analytics ─────────────────────── */}
-          <div className="mt-8 grid grid-cols-1 sm:grid-cols-2 gap-4">
+          {/* ── Quick actions: Chat + Quiz + Analytics ──────────────── */}
+          <div className="mt-8 grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <motion.a
+              href="/chat"
+              initial={{ opacity: 0, y: 12 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.28 }}
+              className="flex items-center gap-4 rounded-2xl bg-gradient-to-br from-sky-500 to-cyan-600 px-6 py-5 shadow-md hover:shadow-lg transition-all hover:scale-[1.02] cursor-pointer no-underline"
+            >
+              <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-white/20">
+                <MessageCircle size={24} className="text-white" />
+              </div>
+              <div>
+                <div className="font-display text-lg font-extrabold text-white">
+                  {t.pages.dashboard.chatCta.title}
+                </div>
+                <div className="text-sky-100 text-sm">{t.pages.dashboard.chatCta.sub}</div>
+              </div>
+            </motion.a>
             <motion.a
               href="/quiz"
               initial={{ opacity: 0, y: 12 }}
               animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.3 }}
+              transition={{ delay: 0.34 }}
               className="flex items-center gap-4 rounded-2xl bg-gradient-to-br from-violet-600 to-blue-600 px-6 py-5 shadow-md hover:shadow-lg transition-all hover:scale-[1.02] cursor-pointer no-underline"
             >
               <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-white/20">
@@ -167,7 +264,7 @@ export default function DashboardPage() {
               href="/analytics"
               initial={{ opacity: 0, y: 12 }}
               animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.38 }}
+              transition={{ delay: 0.4 }}
               className="flex items-center gap-4 rounded-2xl bg-gradient-to-br from-emerald-600 to-teal-600 px-6 py-5 shadow-md hover:shadow-lg transition-all hover:scale-[1.02] cursor-pointer no-underline"
             >
               <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-white/20">
@@ -179,6 +276,41 @@ export default function DashboardPage() {
               </div>
             </motion.a>
           </div>
+
+          {/* ── Time + Lessons + Journey ────────────────────────────── */}
+          <div className="mt-8 grid grid-cols-1 lg:grid-cols-3 gap-5">
+            <TimeSpentCard
+              extras={dashExtras}
+              heading={t.pages.dashboard.time.heading}
+              todayLabel={t.pages.dashboard.time.today}
+              weekLabel={t.pages.dashboard.time.week}
+              totalLabel={t.pages.dashboard.time.total}
+              minutesLabel={t.pages.dashboard.time.minutes}
+            />
+            <LessonsCard
+              extras={dashExtras}
+              heading={t.pages.dashboard.lessons.heading}
+              todayLabel={t.pages.dashboard.lessons.today}
+              totalLabel={t.pages.dashboard.lessons.total}
+            />
+            <LearnerJourneyTree
+              journey={dashExtras?.journey ?? null}
+              title={t.pages.dashboard.journey.title}
+              sub={t.pages.dashboard.journey.sub}
+              streakLabel={t.pages.dashboard.journey.streak}
+              wiltedHint={t.pages.dashboard.journey.wilted}
+              emptyHint={t.pages.dashboard.journey.empty}
+            />
+          </div>
+
+          {/* ── Daily schedule ──────────────────────────────────────── */}
+          <DailySchedule
+            items={dashExtras?.schedule ?? null}
+            heading={t.pages.dashboard.schedule.heading}
+            sub={t.pages.dashboard.schedule.sub}
+            empty={t.pages.dashboard.schedule.empty}
+            onToggle={handleToggleSchedule}
+          />
 
           {/* ── Subjects ────────────────────────────────────────────── */}
           <SubjectsSection
@@ -215,6 +347,17 @@ export default function DashboardPage() {
           </div>
         </div>
       </div>
+
+      <MoodCheckIn
+        open={moodOpen}
+        isUr={locale === "ur"}
+        title={t.pages.dashboard.mood.title}
+        sub={t.pages.dashboard.mood.sub}
+        skipLabel={t.pages.dashboard.mood.skip}
+        saving={moodSaving}
+        onSelect={handleMood}
+        onSkip={() => setMoodOpen(false)}
+      />
 
       <Footer />
     </main>
@@ -261,9 +404,18 @@ function useCountUp(target: number | null, durationMs = 900): number {
 
 // ─── Header ────────────────────────────────────────────────────────────────
 
-function DashHeader({ name, grade, stars }: { name: string; grade: number; stars: number }) {
+function DashHeader({
+  name,
+  grade,
+  stars,
+  avatar,
+}: {
+  name: string;
+  grade: number;
+  stars: number;
+  avatar?: string | null;
+}) {
   const { t } = useLocale();
-  const initial = (name || "S").trim().charAt(0).toUpperCase();
   const greeting = `${t.pages.dashboard.greeting}, ${name}!`;
   // Split into words so each word can fade in with a tiny stagger.
   const words = greeting.split(" ");
@@ -276,23 +428,20 @@ function DashHeader({ name, grade, stars }: { name: string; grade: number; stars
       transition={{ duration: 0.5, ease: "easeOut" }}
       className="relative flex items-center gap-5 rounded-3xl glass-strong p-6 md:p-7 shadow-soft overflow-hidden"
     >
+      <div
+        aria-hidden
+        className="pointer-events-none absolute inset-0 bg-gradient-to-br from-glacier-50/80 via-transparent to-mint-100/50"
+      />
       {/* Avatar (with soft halo CONTAINED inside the header card) */}
       <div className="relative flex-shrink-0">
         <span
           aria-hidden
-          className="absolute inset-0 rounded-full bg-glacier-300/40 blur-2xl scale-110"
+          className="absolute inset-0 rounded-full bg-glacier-300/35 blur-2xl scale-110"
         />
-            <motion.div
-          initial={{ scale: 0.8, rotate: -10 }}
-          animate={{ scale: 1, rotate: 0 }}
-          transition={{ type: "spring", stiffness: 200, damping: 14, delay: 0.1 }}
-          className="relative flex h-16 w-16 md:h-20 md:w-20 items-center justify-center rounded-full bg-gradient-to-br from-glacier-500 via-glacier-600 to-deep text-white font-display text-2xl md:text-3xl font-extrabold shadow-soft ring-2 ring-white/60"
-        >
-          {initial}
-        </motion.div>
+        <AvatarDisplay avatarId={avatar} name={name} size={80} className="relative ring-2 ring-white/90" />
       </div>
 
-      <div className="flex-1 min-w-0">
+      <div className="relative flex-1 min-w-0">
         <h1 className="font-display text-2xl md:text-4xl font-extrabold text-deep">
           {words.map((w, i) => (
             <motion.span
@@ -344,6 +493,172 @@ function StarBadge({ stars, hasStars }: { stars: number; hasStars: boolean }) {
         {t.pages.dashboard.stats.stars}
       </span>
     </motion.div>
+  );
+}
+
+// ─── Part B #9: Time / Lessons / Schedule ──────────────────────────────────
+
+function TimeSpentCard({
+  extras,
+  heading,
+  todayLabel,
+  weekLabel,
+  totalLabel,
+  minutesLabel,
+}: {
+  extras: DashboardExtras | null;
+  heading: string;
+  todayLabel: string;
+  weekLabel: string;
+  totalLabel: string;
+  minutesLabel: string;
+}) {
+  const rows = [
+    { label: todayLabel, value: extras?.time.today_minutes ?? null },
+    { label: weekLabel, value: extras?.time.week_minutes ?? null },
+    { label: totalLabel, value: extras?.time.total_minutes ?? null },
+  ];
+  return (
+    <motion.section
+      initial={{ opacity: 0, y: 14 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ delay: 0.32 }}
+      className="rounded-3xl glass-strong p-6 shadow-soft"
+    >
+      <div className="flex items-center gap-2 mb-4">
+        <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-amber-200 to-orange-300 text-deep">
+          <Clock size={18} />
+        </div>
+        <h2 className="font-display text-lg font-extrabold text-deep">{heading}</h2>
+      </div>
+      <ul className="space-y-3">
+        {rows.map((r) => (
+          <li key={r.label} className="flex items-center justify-between rounded-2xl bg-white/55 px-4 py-3">
+            <span className="text-sm font-bold text-deep-soft">{r.label}</span>
+            <span className="font-display text-xl font-extrabold text-deep tabular-nums">
+              {r.value == null ? "—" : r.value}
+              <span className="ml-1 text-xs font-bold text-deep-muted">{minutesLabel}</span>
+            </span>
+          </li>
+        ))}
+      </ul>
+    </motion.section>
+  );
+}
+
+function LessonsCard({
+  extras,
+  heading,
+  todayLabel,
+  totalLabel,
+}: {
+  extras: DashboardExtras | null;
+  heading: string;
+  todayLabel: string;
+  totalLabel: string;
+}) {
+  return (
+    <motion.section
+      initial={{ opacity: 0, y: 14 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ delay: 0.36 }}
+      className="rounded-3xl glass-strong p-6 shadow-soft"
+    >
+      <div className="flex items-center gap-2 mb-4">
+        <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-sky-200 to-blue-300 text-deep">
+          <BookOpen size={18} />
+        </div>
+        <h2 className="font-display text-lg font-extrabold text-deep">{heading}</h2>
+      </div>
+      <div className="grid grid-cols-2 gap-3">
+        <div className="rounded-2xl bg-white/55 px-4 py-5 text-center">
+          <div className="font-display text-3xl font-extrabold text-deep tabular-nums">
+            {extras ? extras.lessons.today : "—"}
+          </div>
+          <div className="mt-1 text-xs font-bold text-deep-soft">{todayLabel}</div>
+        </div>
+        <div className="rounded-2xl bg-white/55 px-4 py-5 text-center">
+          <div className="font-display text-3xl font-extrabold text-deep tabular-nums">
+            {extras ? extras.lessons.covered : "—"}
+          </div>
+          <div className="mt-1 text-xs font-bold text-deep-soft">{totalLabel}</div>
+        </div>
+      </div>
+      {extras?.mood_today && (
+        <p className="mt-4 text-xs text-deep-muted text-center capitalize">
+          Mood today: {extras.mood_today}
+        </p>
+      )}
+    </motion.section>
+  );
+}
+
+function DailySchedule({
+  items,
+  heading,
+  sub,
+  empty,
+  onToggle,
+}: {
+  items: DashboardExtras["schedule"] | null;
+  heading: string;
+  sub: string;
+  empty: string;
+  onToggle: (id: string) => void;
+}) {
+  return (
+    <motion.section
+      initial={{ opacity: 0, y: 14 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ delay: 0.42 }}
+      className="mt-6 rounded-3xl glass-strong p-6 md:p-7 shadow-soft"
+    >
+      <h2 className="font-display text-xl md:text-2xl font-extrabold text-deep">{heading}</h2>
+      <p className="mt-1 text-sm text-deep-soft">{sub}</p>
+
+      {items === null ? (
+        <div className="mt-4 space-y-2 animate-pulse">
+          <div className="h-12 rounded-2xl bg-glacier-100/70" />
+          <div className="h-12 rounded-2xl bg-glacier-100/50" />
+        </div>
+      ) : items.length === 0 ? (
+        <p className="mt-4 text-sm text-deep-muted">{empty}</p>
+      ) : (
+        <ul className="mt-4 space-y-2">
+          {items.map((item) => (
+            <li key={item.id}>
+              <button
+                type="button"
+                onClick={() => onToggle(item.id)}
+                className={`w-full flex items-center gap-3 rounded-2xl px-4 py-3 text-left transition-colors ${
+                  item.done
+                    ? "bg-emerald-50/80 border border-emerald-200/60"
+                    : "bg-white/55 hover:bg-white/80 border border-transparent"
+                }`}
+              >
+                <span
+                  className={`flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full border-2 ${
+                    item.done ? "border-emerald-500 bg-emerald-500" : "border-glacier-300"
+                  }`}
+                >
+                  {item.done && <Check size={14} className="text-white" />}
+                </span>
+                <span
+                  className={`flex-1 text-sm font-bold ${
+                    item.done ? "text-emerald-800 line-through decoration-emerald-400/70" : "text-deep"
+                  }`}
+                >
+                  {item.title}
+                </span>
+                {item.subject && (
+                  <span className="text-[11px] font-bold text-deep-muted">{item.subject}</span>
+                )}
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </motion.section>
   );
 }
 

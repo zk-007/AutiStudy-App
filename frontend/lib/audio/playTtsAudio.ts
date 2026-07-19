@@ -1,11 +1,11 @@
 /**
- * Play TTS with max volume and optional gain boost (read-aloud / agent voice).
+ * Prepare TTS audio element (volume, rate, optional gain boost).
  */
-export async function playTtsAudio(
+export function prepareTtsAudio(
   audio: HTMLAudioElement,
-  options?: { playbackRate?: number; gain?: number },
-): Promise<void> {
-  audio.volume = 1;
+  options?: { playbackRate?: number; gain?: number; volume?: number },
+): void {
+  audio.volume = Math.min(1, Math.max(0, options?.volume ?? 1));
   audio.playbackRate = options?.playbackRate ?? 1;
 
   const gainValue = options?.gain ?? 1.4;
@@ -17,11 +17,21 @@ export async function playTtsAudio(
       gain.gain.value = gainValue;
       source.connect(gain);
       gain.connect(ctx.destination);
-      await ctx.resume();
+      void ctx.resume();
     } catch {
       // Fall back to plain HTMLAudioElement volume
     }
   }
+}
+
+/**
+ * Play TTS with max volume and optional gain boost (read-aloud / agent voice).
+ */
+export async function playTtsAudio(
+  audio: HTMLAudioElement,
+  options?: { playbackRate?: number; gain?: number },
+): Promise<void> {
+  prepareTtsAudio(audio, options);
 
   return new Promise<void>((resolve) => {
     audio.onended = () => resolve();

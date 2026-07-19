@@ -317,6 +317,23 @@ html.dark select {
     text-wrap: balance;
   }
 
+  /*
+   * Primary CTA gradient — stays saturated blue→navy in BOTH themes.
+   * Do NOT use to-deep for white-text buttons: in dark mode --deep flips to light text.
+   */
+  .bg-cta {
+    background-image: linear-gradient(to bottom right, #3a96bc, #0f2d4a);
+  }
+  .bg-cta-r {
+    background-image: linear-gradient(to right, #3a96bc, #0f2d4a);
+  }
+  html.dark .bg-cta {
+    background-image: linear-gradient(to bottom right, #1e6a8f, #071018);
+  }
+  html.dark .bg-cta-r {
+    background-image: linear-gradient(to right, #1e6a8f, #071018);
+  }
+
   .glass {
     background: var(--glass-bg);
     backdrop-filter: blur(14px);

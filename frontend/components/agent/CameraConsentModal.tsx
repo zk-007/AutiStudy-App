@@ -93,7 +93,7 @@ export function CameraConsentModal({ open, onAllow, onDecline }: CameraConsentMo
                   whileHover={{ scale: 1.04 }}
                   whileTap={{ scale: 0.97 }}
                   onClick={onAllow}
-                  className="flex-1 py-3.5 rounded-2xl bg-gradient-to-r from-glacier-500 to-blue-500 text-white font-bold text-base shadow-md"
+                  className="flex-1 py-3.5 rounded-2xl bg-cta-r text-white font-bold text-base shadow-md"
                 >
                   Yes, turn on camera! 📷
                 </motion.button>

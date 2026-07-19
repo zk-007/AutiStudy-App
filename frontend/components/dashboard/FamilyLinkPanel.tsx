@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { useCallback, useEffect, useState } from "react";
 import { motion } from "framer-motion";
@@ -400,7 +400,7 @@ export function FamilyLinkPanel({
             type="button"
             disabled={busy}
             onClick={createInvite}
-            className="inline-flex items-center gap-2 rounded-full bg-gradient-to-br from-glacier-600 to-deep px-5 py-2.5 text-sm font-bold text-white disabled:opacity-60"
+            className="inline-flex items-center gap-2 rounded-full bg-cta px-5 py-2.5 text-sm font-bold text-white disabled:opacity-60"
           >
             {busy ? <Loader2 size={14} className="animate-spin" /> : sendByEmail ? <Mail size={14} /> : null}
             {t.create}

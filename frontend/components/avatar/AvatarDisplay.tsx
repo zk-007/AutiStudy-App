@@ -27,7 +27,7 @@ export function AvatarDisplay({ avatarId, name, size = 64, className = "" }: Ava
       className={`relative flex items-center justify-center rounded-full overflow-hidden shadow-soft ring-2 ring-white/80 ${
         hasAvatar
           ? "shadow-[0_8px_20px_-6px_rgba(15,39,68,0.28)]"
-          : "bg-gradient-to-br from-glacier-500 via-glacier-600 to-deep"
+          : "bg-cta"
       } ${className}`}
     >
       {hasAvatar ? (

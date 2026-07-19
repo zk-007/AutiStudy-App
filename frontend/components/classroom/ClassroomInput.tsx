@@ -255,7 +255,7 @@ export function ClassroomInput({
             type="button"
             onClick={handleSubmit}
             disabled={disabled || loading || !text.trim()}
-            className="rounded-xl bg-gradient-to-br from-glacier-500 to-deep text-white px-4 py-3 font-bold shadow-soft disabled:opacity-50 flex items-center gap-2"
+            className="rounded-xl bg-cta text-white px-4 py-3 font-bold shadow-soft disabled:opacity-50 flex items-center gap-2"
           >
             {loading ? <Loader2 size={18} className="animate-spin" /> : <Send size={18} />}
             Ask
@@ -272,7 +272,7 @@ export function ClassroomInput({
                 ? "bg-rose-500 text-white ring-4 ring-rose-200"
                 : status === "readying"
                   ? "bg-glacier-300 text-white"
-                  : "bg-gradient-to-br from-glacier-500 to-deep text-white hover:scale-105 active:scale-95"
+                  : "bg-cta text-white hover:scale-105 active:scale-95"
             } disabled:opacity-50`}
             aria-label={listening ? "Stop listening" : "Start listening"}
           >

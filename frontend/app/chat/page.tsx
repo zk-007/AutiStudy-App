@@ -1214,7 +1214,7 @@ function Conversation({ sessionId }: { sessionId: string }) {
             type="button"
             onClick={() => onSend()}
             disabled={sending || inputBlocked || !draft.trim()}
-            className="flex items-center gap-2 rounded-2xl bg-gradient-to-br from-glacier-500 to-deep text-white font-bold px-5 py-3 shadow-soft hover:shadow-deep disabled:opacity-50 disabled:cursor-not-allowed transition-shadow"
+            className="flex items-center gap-2 rounded-2xl bg-cta text-white font-bold px-5 py-3 shadow-soft hover:shadow-deep disabled:opacity-50 disabled:cursor-not-allowed transition-shadow"
           >
             <Send size={16} />
             <span className="hidden sm:inline">{t.pages.chat.send}</span>
@@ -2596,7 +2596,7 @@ function Bubble({
         <div
           className={`rounded-3xl px-5 py-3.5 leading-relaxed shadow-soft ${
             isUser
-              ? "bg-gradient-to-br from-glacier-500 to-deep text-white rounded-br-md whitespace-pre-wrap"
+              ? "bg-cta text-white rounded-br-md whitespace-pre-wrap"
               : "bg-white/90 text-deep rounded-bl-md border border-white/60"
           }`}
         >

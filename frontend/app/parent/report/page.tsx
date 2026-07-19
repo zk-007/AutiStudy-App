@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
@@ -67,7 +67,7 @@ const SECTION_STYLES: Record<string, {
   sky: {
     bg: "from-sky-50 to-cyan-50",
     border: "border-glacier-200",
-    icon: "from-glacier-500 to-deep",
+    icon: "from-sky-700 to-slate-900",
     badge: "bg-glacier-100 text-glacier-700 border-glacier-200",
     dot: "bg-glacier-500",
   },

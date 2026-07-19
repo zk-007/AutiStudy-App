@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
@@ -543,7 +543,7 @@ export default function ParentDashboard() {
                 }}
                 className="w-full flex items-center gap-4 rounded-2xl border border-glacier-200 bg-glacier-50/50 px-4 py-4 text-left hover:bg-glacier-100/70 hover:border-glacier-300 transition-all"
               >
-                <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br from-glacier-500 to-deep text-2xl text-white shadow-md">
+                <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-cta text-2xl text-white shadow-md">
                   🎒
                 </div>
                 <div className="min-w-0 flex-1">
@@ -581,7 +581,7 @@ export default function ParentDashboard() {
               <button
                 type="submit"
                 disabled={redeemBusy || inviteCode.trim().length < 5}
-                className="w-full rounded-full bg-gradient-to-r from-glacier-600 to-deep px-5 py-3 text-white font-bold disabled:opacity-50"
+                className="w-full rounded-full bg-cta-r px-5 py-3 text-white font-bold disabled:opacity-50"
               >
                 {redeemBusy ? "Checking…" : "Submit invitation code"}
               </button>
@@ -639,14 +639,14 @@ export default function ParentDashboard() {
               <button
                 type="submit"
                 disabled={redeemBusy || inviteCode.trim().length < 5}
-                className="w-full rounded-full bg-gradient-to-r from-glacier-600 to-deep px-5 py-3 text-white font-bold disabled:opacity-50 shadow-md"
+                className="w-full rounded-full bg-cta-r px-5 py-3 text-white font-bold disabled:opacity-50 shadow-md"
               >
                 {redeemBusy ? "Checking…" : "Submit invitation code"}
               </button>
             </form>
           )}
           {pending && (
-            <button type="button" onClick={() => void load()} className="rounded-full bg-gradient-to-r from-glacier-600 to-deep px-5 py-2.5 text-white font-bold shadow-md">
+            <button type="button" onClick={() => void load()} className="rounded-full bg-cta-r px-5 py-2.5 text-white font-bold shadow-md">
               Refresh status
             </button>
           )}
@@ -704,7 +704,7 @@ export default function ParentDashboard() {
       {/* Header */}
       <header className="sticky top-0 z-30 border-b border-white/70 bg-white/75 backdrop-blur-xl px-5 sm:px-6 py-3.5 flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-gradient-to-br from-glacier-500 to-deep text-xl shadow-md">👨‍👩‍👧</div>
+          <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-cta text-xl shadow-md">👨‍👩‍👧</div>
           <div>
             <p className="text-[11px] uppercase tracking-wider text-glacier-700/80 font-bold">{pd.title}</p>
             <p className="font-display text-lg font-extrabold text-deep leading-tight">{parent.name}</p>
@@ -740,7 +740,7 @@ export default function ParentDashboard() {
           initial={{ opacity: 0, y: 14 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.35 }}
-          className="relative overflow-hidden rounded-[1.75rem] bg-gradient-to-br from-glacier-600 via-glacier-500 to-deep p-6 text-white shadow-[0_22px_50px_-20px_rgba(2,132,199,0.55)]"
+          className="relative overflow-hidden rounded-[1.75rem] bg-cta p-6 text-white shadow-[0_22px_50px_-20px_rgba(2,132,199,0.55)]"
         >
           <div className="pointer-events-none absolute -right-10 -top-10 h-40 w-40 rounded-full bg-white/10" />
           <div className="pointer-events-none absolute -left-8 bottom-0 h-28 w-28 rounded-full bg-cyan-300/20" />
@@ -784,7 +784,7 @@ export default function ParentDashboard() {
         {/* ── Key metric cards ── */}
         <div className="grid grid-cols-2 gap-3">
           <MetricCard icon={<BookOpen size={18} />} label={pd.chatSessions} value={data.total_chats}
-            sub={pd.chatSub} gradient="from-glacier-500 to-deep" />
+            sub={pd.chatSub} gradient="from-sky-700 to-slate-900" />
           <MetricCard icon={<Brain size={18} />} label={pd.favSubject} value={data.favourite_subject}
             sub={pd.favSub} gradient="from-mint-300 to-glacier-500" />
           <MetricCard icon={<Timer size={18} />} label={pd.timeSpent} value={`${analytics.total_time_minutes ?? 0}m`}
@@ -801,7 +801,7 @@ export default function ParentDashboard() {
             if (email) setSelectedChildEmail(email);
             router.push("/parent/report");
           }}
-          className="w-full flex items-center justify-between rounded-2xl bg-gradient-to-r from-glacier-600 to-deep px-6 py-4 text-white shadow-[0_14px_34px_-16px_rgba(2,132,199,0.7)] hover:shadow-xl transition-all"
+          className="w-full flex items-center justify-between rounded-2xl bg-cta-r px-6 py-4 text-white shadow-[0_14px_34px_-16px_rgba(2,132,199,0.7)] hover:shadow-xl transition-all"
         >
           <div className="flex items-center gap-3">
             <span className="flex h-11 w-11 items-center justify-center rounded-xl bg-white/15">
@@ -924,7 +924,7 @@ export default function ParentDashboard() {
               <button
                 type="submit"
                 disabled={redeemBusy || inviteCode.trim().length < 5}
-                className="w-full rounded-full bg-gradient-to-r from-glacier-600 to-deep px-5 py-3 text-white font-bold disabled:opacity-50"
+                className="w-full rounded-full bg-cta-r px-5 py-3 text-white font-bold disabled:opacity-50"
               >
                 {redeemBusy ? "Checking…" : "Submit invitation code"}
               </button>

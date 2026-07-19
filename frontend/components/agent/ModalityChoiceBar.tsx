@@ -35,7 +35,7 @@ export function ModalityChoiceBar({ choices, onPick, prompt }: ModalityChoiceBar
                 ? "bg-white border border-glacier-200 text-deep-soft hover:bg-glacier-50"
                 : c === "breathing"
                   ? "bg-teal-500 text-white shadow-sm"
-                  : "bg-gradient-to-br from-glacier-500 to-deep text-white shadow-sm"
+                  : "bg-cta text-white shadow-sm"
             }`}
           >
             {MODALITY_LABELS[c]}

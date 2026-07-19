@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
@@ -808,7 +808,7 @@ function SubjectCard({
       </p>
       <button
         onClick={() => router.push(`/chat?subject=${encodeURIComponent(subject.name)}`)}
-        className="mt-5 inline-flex items-center justify-center gap-2 rounded-full bg-gradient-to-br from-glacier-500 to-deep text-white font-bold px-5 py-2.5 shadow-soft hover:shadow-deep transition-shadow"
+        className="mt-5 inline-flex items-center justify-center gap-2 rounded-full bg-cta text-white font-bold px-5 py-2.5 shadow-soft hover:shadow-deep transition-shadow"
       >
         {studyLabel}
         <ArrowRight size={16} className="transition-transform group-hover:translate-x-0.5" />

@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { useState, useRef, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
@@ -395,7 +395,7 @@ function LanguageSection() {
   const isUr = locale === "ur";
   return (
     <div>
-      <SectionHeader emoji="🌐" title={isUr ? "زبان" : "Language"} color="from-glacier-600 to-deep" />
+      <SectionHeader emoji="🌐" title={isUr ? "زبان" : "Language"} color="from-sky-700 to-slate-900" />
       <div className="rounded-2xl bg-white/80 border border-glacier-100 px-5 py-5">
         <p className="text-sm text-deep-soft mb-4">{isUr ? "انٹرفیس کی زبان منتخب کریں:" : "Choose the interface language:"}</p>
         <div className="grid grid-cols-2 gap-3">
@@ -477,7 +477,7 @@ function ProfileSection() {
           : (isUr ? "ابھی منسلک نہیں" : "Not linked yet");
     return (
       <div>
-        <SectionHeader emoji="👤" title={isUr ? "پروفائل" : "Profile"} color="from-glacier-600 to-deep" />
+        <SectionHeader emoji="👤" title={isUr ? "پروفائل" : "Profile"} color="from-sky-700 to-slate-900" />
         <div className="rounded-2xl bg-white/80 border border-glacier-100 p-5 mb-3">
           <div className="flex items-center gap-4">
             <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-br from-glacier-100 to-glacier-200 text-3xl">
@@ -727,7 +727,7 @@ function ParentAccountPanel({
 
   return (
     <div>
-      <SectionHeader emoji="🔒" title={isUr ? "اکاؤنٹ" : "Account"} color="from-glacier-600 to-deep" />
+      <SectionHeader emoji="🔒" title={isUr ? "اکاؤنٹ" : "Account"} color="from-sky-700 to-slate-900" />
       <div className="rounded-2xl bg-white/80 border border-glacier-100 px-5 divide-y divide-glacier-50 mb-4">
         <Row label={isUr ? "اکاؤنٹ کی قسم" : "Account type"}>
           <span className="text-sm font-bold text-glacier-700">{isUr ? "والدین" : "Parent"}</span>
@@ -1443,7 +1443,7 @@ function FamilySection() {
   if (parentLoading && !isAuthenticated) {
     return (
       <div>
-        <SectionHeader emoji="👨‍👩‍👧" title={isUr ? "خاندان" : "Family"} color="from-glacier-600 to-deep" />
+        <SectionHeader emoji="👨‍👩‍👧" title={isUr ? "خاندان" : "Family"} color="from-sky-700 to-slate-900" />
         <p className="text-sm text-deep-muted px-1">{isUr ? "لوڈ ہو رہا ہے…" : "Loading…"}</p>
       </div>
     );
@@ -1464,7 +1464,7 @@ function FamilySection() {
         : (isUr ? "والد" : "Father");
     return (
       <div>
-        <SectionHeader emoji="👨‍👩‍👧" title={isUr ? "خاندان" : "Family"} color="from-glacier-600 to-deep" />
+        <SectionHeader emoji="👨‍👩‍👧" title={isUr ? "خاندان" : "Family"} color="from-sky-700 to-slate-900" />
         <p className="mb-4 text-xs text-deep-soft leading-relaxed px-1">
           {isUr
             ? "والدین اکاؤنٹ — ایک سے زیادہ بچے لنک کر سکتے ہیں۔ ہر بچے کے لیے صرف ایک والد اور ایک والدہ۔"
@@ -1527,7 +1527,7 @@ function FamilySection() {
 
   return (
     <div>
-      <SectionHeader emoji="👨‍👩‍👧" title={isUr ? "خاندان" : "Family"} color="from-glacier-600 to-deep" />
+      <SectionHeader emoji="👨‍👩‍👧" title={isUr ? "خاندان" : "Family"} color="from-sky-700 to-slate-900" />
       {!isAuthenticated ? (
         <NotLoggedIn isUr={isUr} />
       ) : (

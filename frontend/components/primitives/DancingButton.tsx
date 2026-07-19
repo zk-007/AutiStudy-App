@@ -25,7 +25,7 @@ export function DancingButton({
 
   const variants: Record<Variant, string> = {
     primary:
-      "text-white bg-gradient-to-br from-glacier-600 via-glacier-700 to-deep shadow-soft hover:shadow-deep",
+      "text-white bg-cta shadow-soft hover:shadow-deep",
     ghost:
       "text-deep bg-white/40 border border-glacier-300/50 backdrop-blur-md hover:bg-white/70",
     soft:

@@ -47,7 +47,7 @@ export function StudyOrRestChoice({ variant, onKeepStudying, onRest }: StudyOrRe
                 whileHover={{ scale: 1.06 }}
                 whileTap={{ scale: 0.95 }}
                 onClick={handleStudy}
-                className="flex-1 flex flex-col items-center gap-1.5 rounded-2xl bg-gradient-to-br from-glacier-400 to-deep text-white py-3 font-bold text-sm shadow-md"
+                className="flex-1 flex flex-col items-center gap-1.5 rounded-2xl bg-cta text-white py-3 font-bold text-sm shadow-md"
               >
                 <span className="text-2xl">📚</span>
                 Keep studying

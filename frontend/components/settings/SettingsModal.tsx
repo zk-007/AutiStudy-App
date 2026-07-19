@@ -69,7 +69,7 @@ function Row({ label, sub, children }: { label: string; sub?: string; children: 
 /** Helper tip — always high contrast (tinted card + primary text in both themes). */
 function Tip({ children }: { children: ReactNode }) {
   return (
-    <p className="mt-3 rounded-2xl bg-glacier-100 border border-glacier-200 px-4 py-3 text-xs text-deep leading-relaxed">
+    <p className="mt-3 rounded-2xl bg-white/70 dark:bg-[#31485f]/90 border border-glacier-200 dark:border-white/15 px-4 py-3 text-xs text-deep leading-relaxed">
       {children}
     </p>
   );
@@ -1600,16 +1600,16 @@ export function SettingsModal() {
             animate={{ scale: 1, opacity: 1, y: 0 }}
             exit={{ scale: 0.94, opacity: 0, y: 12 }}
             transition={{ duration: 0.25, ease: "easeOut" }}
-            className="w-full max-w-2xl max-h-[88vh] rounded-3xl bg-glacier-50 shadow-2xl flex flex-col overflow-hidden border border-glacier-200"
+            className="w-full max-w-2xl max-h-[88vh] rounded-3xl shadow-2xl flex flex-col overflow-hidden border border-glacier-200 bg-gradient-to-br from-sky-50 via-white to-violet-50 dark:from-[#243447] dark:via-[#1e2f42] dark:to-[#2a3f56]"
           >
             {/* Header */}
-            <div className="flex items-center justify-between px-6 py-4 border-b border-glacier-200 flex-shrink-0 bg-glacier-100">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-glacier-200/80 dark:border-white/10 flex-shrink-0 bg-white/50 dark:bg-[#2a3a4f]/70 backdrop-blur-sm">
               <div className="flex items-center gap-3">
                 <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-violet-500 to-purple-600 text-white text-lg">⚙️</div>
                 <h1 className="font-display text-xl font-extrabold text-deep">{isUr ? "ترتیبات" : "Settings"}</h1>
               </div>
               <button onClick={closeSettings}
-                className="flex h-9 w-9 items-center justify-center rounded-xl bg-glacier-50 border border-glacier-200 text-deep-soft hover:text-deep hover:bg-glacier-200 transition-all">
+                className="flex h-9 w-9 items-center justify-center rounded-xl bg-white/70 dark:bg-white/10 border border-glacier-200 dark:border-white/15 text-deep-soft hover:text-deep hover:bg-white dark:hover:bg-white/15 transition-all">
                 <X size={18} />
               </button>
             </div>
@@ -1617,10 +1617,10 @@ export function SettingsModal() {
             {/* Body: sidebar + content */}
             <div className="flex flex-1 overflow-hidden">
               {/* Sidebar */}
-              <nav className="w-44 flex-shrink-0 min-h-0 border-r border-glacier-200 py-3 overflow-x-hidden overflow-y-auto overscroll-y-contain modal-scroll bg-glacier-100">
+              <nav className="w-44 flex-shrink-0 min-h-0 border-r border-glacier-200/80 dark:border-white/10 py-3 overflow-x-hidden overflow-y-auto overscroll-y-contain modal-scroll bg-white/40 dark:bg-[#1a2838]/55">
                 {SIDEBAR.map(item => (
                   <button key={item.id} onClick={() => setActive(item.id)}
-                    className={`w-full flex items-center gap-2.5 px-4 py-3 text-sm font-bold transition-all rounded-r-xl mr-2 ${active === item.id ? "bg-glacier-50 text-sky-700 dark:text-sky-300 shadow-sm border-l-2 border-sky-500" : "text-deep-soft hover:text-deep hover:bg-glacier-50/80"}`}
+                    className={`w-full flex items-center gap-2.5 px-4 py-3 text-sm font-bold transition-all rounded-r-xl mr-2 ${active === item.id ? "bg-white/90 dark:bg-[#3a4f63] text-sky-700 dark:text-sky-300 shadow-sm border-l-2 border-sky-500" : "text-deep-soft hover:text-deep hover:bg-white/50 dark:hover:bg-white/10"}`}
                   >
                     <span className="text-base">{item.emoji}</span>
                     <span className="truncate">{isUr ? item.labelUr : item.label}</span>
@@ -1629,8 +1629,8 @@ export function SettingsModal() {
                 ))}
               </nav>
 
-              {/* Content — theme tokens only (no light violet/white wash in dark mode) */}
-              <div className="flex-1 min-h-0 overflow-y-auto overscroll-y-contain modal-scroll px-6 py-5 bg-glacier-50">
+              {/* Content — soft mid gradient (not washed white, not pitch black) */}
+              <div className="flex-1 min-h-0 overflow-y-auto overscroll-y-contain modal-scroll px-6 py-5 bg-gradient-to-br from-violet-50/40 via-sky-50/30 to-white/40 dark:from-[#2a3d52]/80 dark:via-[#243647]/70 dark:to-[#31485f]/75">
                 <AnimatePresence mode="wait">
                   <motion.div key={active}
                     initial={{ opacity: 0, x: 10 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -10 }}

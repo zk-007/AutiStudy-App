@@ -318,7 +318,7 @@ export function FamilyLinkPanel({
       {/* Linked parents (Father / Mother slots) */}
       {linkedParents.length > 0 && (
         <div className="mt-4 space-y-2">
-          <p className="text-sm font-bold text-emerald-900">{t.linked}</p>
+          <p className="text-sm font-bold text-emerald-800 dark:text-emerald-300">{t.linked}</p>
           {linkedParents.map((lp) => (
             <div
               key={lp.invite_id || lp.email}
@@ -377,7 +377,7 @@ export function FamilyLinkPanel({
                 <Mail size={14} className="text-glacier-600" />
                 {t.emailToggle}
               </span>
-              <span className="block text-xs text-deep-muted mt-0.5">
+              <span className="block text-xs text-deep-soft mt-0.5">
                 {isUr
                   ? "اختیاری — کوڈ والدین کی انباکس میں بھیج دیا جائے گا (Spam بھی چیک کریں)۔"
                   : "Optional — we’ll email the FAM code to their inbox (they should also check Spam)."}

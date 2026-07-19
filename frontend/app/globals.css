@@ -108,13 +108,24 @@ body {
 html.dark .bg-aurora {
   background: linear-gradient(
     135deg,
-    #0A1018 0%,
-    #0F1A28 22%,
-    #12241E 48%,
-    #101C2C 74%,
-    #0A1018 100%
+    #070B12 0%,
+    #0A1018 22%,
+    #0C1614 48%,
+    #0A121C 74%,
+    #070B12 100%
   );
   background-size: 300% 300%;
+}
+
+/* Kill leftover pure-white washes that wash out light text in dark mode */
+html.dark .via-white {
+  --tw-gradient-via: #0F1A28 !important;
+}
+html.dark .to-white {
+  --tw-gradient-to: #0A1018 !important;
+}
+html.dark .from-white {
+  --tw-gradient-from: #0F1A28 !important;
 }
 
 @keyframes drift {

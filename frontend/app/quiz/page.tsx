@@ -30,9 +30,24 @@ import { QuizMarkdown } from "@/lib/quiz/QuizMarkdown";
 type Phase = "pick" | "chapters" | "loading" | "question" | "result";
 
 const SUBJECT_META: Record<string, { icon: React.ElementType; color: string; bg: string; border: string }> = {
-  Maths: { icon: Brain, color: "text-violet-600", bg: "bg-violet-50", border: "border-violet-200" },
-  "General Science": { icon: FlaskConical, color: "text-emerald-600", bg: "bg-emerald-50", border: "border-emerald-200" },
-  "Computer Science": { icon: Monitor, color: "text-sky-600", bg: "bg-sky-50", border: "border-sky-200" },
+  Maths: {
+    icon: Brain,
+    color: "text-violet-700 dark:text-violet-300",
+    bg: "bg-violet-50 dark:bg-violet-950/50",
+    border: "border-violet-200 dark:border-violet-500/50",
+  },
+  "General Science": {
+    icon: FlaskConical,
+    color: "text-emerald-700 dark:text-emerald-300",
+    bg: "bg-emerald-50 dark:bg-emerald-950/45",
+    border: "border-emerald-200 dark:border-emerald-500/50",
+  },
+  "Computer Science": {
+    icon: Monitor,
+    color: "text-sky-700 dark:text-sky-300",
+    bg: "bg-sky-50 dark:bg-sky-950/45",
+    border: "border-sky-200 dark:border-sky-500/50",
+  },
 };
 
 const GRADE_SUBJECTS: Record<number, string[]> = {
@@ -200,7 +215,7 @@ export default function QuizPage() {
   }
 
   return (
-    <main className="relative min-h-screen bg-gradient-to-br from-glacier-50 via-white to-mint-50">
+    <main className="relative min-h-screen bg-gradient-to-br from-glacier-50 via-glacier-100 to-mint-100 dark:from-[#0A1018] dark:via-[#0F1A28] dark:to-[#12241E]">
       <NavBar />
       <div className="px-4 md:px-8 pt-28 pb-20">
         <div className="mx-auto max-w-2xl">
@@ -230,13 +245,13 @@ export default function QuizPage() {
                 exit={{ opacity: 0, y: -16 }}
                 transition={{ duration: 0.3 }}
               >
-                <div className="text-center mb-10">
+                <div className="text-center mb-10 rounded-3xl bg-white/70 dark:bg-[#162232]/92 border border-glacier-100 dark:border-glacier-300/40 px-6 py-8 shadow-soft backdrop-blur-sm">
                   <div className="inline-flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-br from-violet-600 to-blue-600 shadow-lg mb-4">
                     <Trophy size={32} className="text-white" />
                   </div>
                   <h1 className="font-display text-3xl font-extrabold text-deep">Quiz Time!</h1>
                   <p className="mt-2 text-deep-soft">
-                    Grade {user?.grade} · Pick a subject and test your knowledge
+                    Grade {user?.grade ?? "—"} · Pick a subject and test your knowledge
                   </p>
                 </div>
 
@@ -259,12 +274,12 @@ export default function QuizPage() {
                         onClick={() => pickSubject(sub)}
                         className={`w-full flex items-center gap-4 rounded-2xl border-2 ${meta.border} ${meta.bg} px-6 py-5 text-left shadow-sm hover:shadow-md transition-all hover:scale-[1.02] active:scale-[0.99]`}
                         >
-                        <div className={`flex h-12 w-12 items-center justify-center rounded-xl bg-white shadow-sm ${meta.color}`}>
+                        <div className={`flex h-12 w-12 items-center justify-center rounded-xl bg-white dark:bg-[#0F1A28] shadow-sm ${meta.color}`}>
                           <Icon size={24} />
                         </div>
                         <div className="flex-1">
                           <div className={`font-display text-lg font-bold ${meta.color}`}>{sub}</div>
-                          <div className="text-sm text-deep-soft">5 questions · Grade {user?.grade}</div>
+                          <div className="text-sm text-deep-soft">5 questions · Grade {user?.grade ?? "—"}</div>
                         </div>
                         <ChevronRight size={20} className="text-deep-soft" />
                       </motion.button>
@@ -444,14 +459,14 @@ function QuestionCard({
   const meta = SUBJECT_META[subject] ?? { icon: BookOpen, color: "text-glacier-600", bg: "bg-glacier-50", border: "border-glacier-200" };
 
   return (
-    <div className="rounded-3xl bg-white/90 border border-glacier-100 shadow-xl px-6 py-7">
+    <div className="rounded-3xl bg-white/90 dark:bg-[#162232]/95 border border-glacier-100 dark:border-glacier-300/40 shadow-xl px-6 py-7">
       {/* Progress bar */}
       <div className="mb-6">
         <div className="flex justify-between text-xs text-deep-soft mb-2">
           <span>Question {index + 1} of {total}</span>
           <span className={meta.color}>{subject}</span>
         </div>
-        <div className="h-2 rounded-full bg-glacier-100 overflow-hidden">
+        <div className="h-2 rounded-full bg-glacier-100 dark:bg-glacier-200 overflow-hidden">
           <motion.div
             className="h-full rounded-full bg-gradient-to-r from-sky-500 to-cyan-500"
             initial={{ width: `${(index / total) * 100}%` }}
@@ -469,11 +484,11 @@ function QuestionCard({
         {q.options.map((opt, i) => {
           const isCorrect = opt === q.correct;
           const isSelected = opt === selected;
-          let cls = "border-glacier-200 bg-white hover:bg-glacier-50 hover:border-glacier-300 cursor-pointer";
+          let cls = "border-glacier-200 dark:border-glacier-300/50 bg-white dark:bg-[#0F1A28] hover:bg-glacier-50 dark:hover:bg-[#1A2A3C] hover:border-glacier-300 cursor-pointer";
           if (revealed) {
-            if (isCorrect) cls = "border-emerald-400 bg-emerald-50 cursor-default";
-            else if (isSelected) cls = "border-rose-400 bg-rose-50 cursor-default";
-            else cls = "border-glacier-100 bg-glacier-50/50 opacity-60 cursor-default";
+            if (isCorrect) cls = "border-emerald-400 bg-emerald-50 dark:bg-emerald-950/50 cursor-default";
+            else if (isSelected) cls = "border-rose-400 bg-rose-50 dark:bg-rose-950/45 cursor-default";
+            else cls = "border-glacier-100 dark:border-glacier-300/30 bg-glacier-50/50 dark:bg-[#121C28] opacity-60 cursor-default";
           }
           return (
             <motion.button
@@ -557,7 +572,7 @@ function ResultScreen({
   const gradeColor = pct >= 90 ? "text-amber-500" : pct >= 70 ? "text-emerald-500" : pct >= 50 ? "text-glacier-500" : "text-rose-500";
 
   return (
-    <div className="rounded-3xl bg-white/90 border border-glacier-100 shadow-xl px-6 py-8">
+    <div className="rounded-3xl bg-white/90 dark:bg-[#162232]/95 border border-glacier-100 dark:border-glacier-300/40 shadow-xl px-6 py-8">
       {/* Score circle */}
       <div className="flex flex-col items-center mb-8">
         <motion.div

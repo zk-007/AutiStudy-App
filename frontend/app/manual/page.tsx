@@ -27,10 +27,12 @@ const SECTIONS_EN: ManualSection[] = [
   {
     emoji: "🚀",
     title: "1. Getting Started",
-    intro: "Create your account and tell us a little about how you like to learn — just once.",
+    intro: "Create your account, verify your email, and tell us how you like to learn — just once.",
     steps: [
-      "Tap Sign Up on the home page and fill in your name, email, password, and grade.",
-      "Right after signing up, you'll answer a few quick questions: how you like to learn (pictures, listening, reading, or a mix), your preferred language, audio preference, sensory comfort, and explanation style.",
+      "Tap Sign Up and choose Student or Parent. Fill in your name, email, password, and (for students) grade.",
+      "Check your email for a one-time code (OTP). Enter it to verify your account before you can study.",
+      "Forgot your password? On Login, tap Forgot password — we email a code so you can set a new one safely.",
+      "After signup, students answer a few quick questions: how you like to learn (pictures, listening, reading, or a mix), language, audio preference, sensory comfort, and explanation style.",
       "These answers are saved permanently — you will never be asked to repeat them. AutiStudy uses them, plus what actually works for you over time, to personalize every lesson.",
     ],
   },
@@ -42,7 +44,7 @@ const SECTIONS_EN: ManualSection[] = [
       "See your stars, day streak, quizzes taken, and accuracy at a glance.",
       "Check time spent learning (today / week / total), lessons covered, and today's gentle schedule.",
       "Start with a mood check-in, then watch your Learner Journey tree grow on consecutive study days.",
-      "Use the Chat button to open the tutor before picking a subject — or tap a subject card to jump in.",
+      "Use the Chat button to open the tutor before picking a subject — or tap Study on a subject card (Maths, Science, …) to jump in.",
       "\"Continue where you left off\" lets you resume your most recent conversation with one tap.",
       "Your avatar and name appear at the top — change your avatar anytime from Settings.",
     ],
@@ -95,11 +97,12 @@ const SECTIONS_EN: ManualSection[] = [
     title: "7. Settings — Making It Yours",
     intro: "Open Settings from the gear icon in the navigation bar, anytime.",
     steps: [
-      "Appearance — adjust font size and reduce animations for a calmer screen.",
+      "Appearance — Light or Dark theme (saved on this device), font size, and reduce animations for a calmer screen.",
       "Accessibility — high contrast, focus mode (hides decoration), and auto read-aloud.",
       "Voice — choose your tutor's narrator voice (6 options, each with a preview button), and adjust reading speed and volume. These apply everywhere your tutor speaks.",
       "Language — switch between English and Urdu instantly.",
       "Profile — change your avatar, and view your name, grade, and stars.",
+      "Family (students) — create a FAM-XXXXX invite so a parent can link; approve or reject when they request.",
       "Account — change your grade/class, change your registered email (password-confirmed), change your password, or permanently delete your account.",
     ],
   },
@@ -108,9 +111,10 @@ const SECTIONS_EN: ManualSection[] = [
     title: "8. For Parents",
     intro: "Stay gently informed without hovering over every session.",
     steps: [
-      "Your child receives a 6-digit family code after signing up — ask them to share it with you.",
-      "Create a Parent account and enter the family code, your child's name, and matching B-Form/CNIC details to link.",
-      "View a friendly Parent Dashboard summarizing quizzes, accuracy, favourite subjects, and time spent learning.",
+      "Create a Parent account (email OTP verify), then redeem your child's FAM-XXXXX invite code from Settings → Family (on the child account).",
+      "Your child must approve the link in the app (or via the email link). Up to two parents can link (e.g. mother and father).",
+      "Open Parent Dashboard for quizzes, accuracy, favourite subjects, and time spent learning — plus a friendly report view.",
+      "Forgot password works for parent logins the same way: Login → Forgot password → email code → new password.",
     ],
   },
   {
@@ -130,7 +134,7 @@ const SECTIONS_EN: ManualSection[] = [
     steps: [
       "Open Contact from the navigation bar (or footer).",
       "Fill in your name, email, role (student / parent / teacher), subject, and message — then Send.",
-      "Your message is saved for the AutiStudy team to review. You can also email the team addresses shown on the page.",
+      "Your message is emailed to the AutiStudy support inbox and also saved for the team. You can email the addresses shown on the Contact page.",
     ],
   },
 ];
@@ -139,11 +143,13 @@ const SECTIONS_UR: ManualSection[] = [
   {
     emoji: "🚀",
     title: "1. شروعات",
-    intro: "اپنا اکاؤنٹ بنائیں اور صرف ایک بار بتائیں کہ آپ کیسے سیکھنا پسند کرتے ہیں۔",
+    intro: "اکاؤنٹ بنائیں، ای میل تصدیق کریں، اور صرف ایک بار بتائیں کہ آپ کیسے سیکھنا پسند کرتے ہیں۔",
     steps: [
-      "ہوم پیج پر Sign Up دبائیں اور اپنا نام، ای میل، پاس ورڈ، اور گریڈ درج کریں۔",
-      "سائن اپ کے فوراً بعد چند سوالات پوچھے جائیں گے: آپ کیسے سیکھنا پسند کرتے ہیں (تصاویر، سننا، پڑھنا، یا مکس)، زبان، آواز کی ترجیح، حسی آرام، اور explanation style۔",
-      "یہ جوابات مستقل طور پر محفوظ ہو جاتے ہیں — آپ سے دوبارہ کبھی نہیں پوچھا جائے گا۔ آٹی اسٹڈی ان کے ساتھ، وقت کے ساتھ جو واقعی کام کرے، اسے استعمال کر کے ہر سبق ذاتی بناتا ہے۔",
+      "Sign Up دبائیں اور Student یا Parent چنیں۔ نام، ای میل، پاس ورڈ، اور (طالب علم کے لیے) گریڈ درج کریں۔",
+      "اپنی ای میل میں one-time code (OTP) چیک کریں اور اکاؤنٹ verify کریں — اس کے بعد ہی پڑھائی شروع ہوگی۔",
+      "پاس ورڈ بھول گئے؟ Login پر Forgot password دبائیں — ای میل پر کوڈ آئے گا تاکہ نیا پاس ورڈ محفوظ طریقے سے سیٹ کریں۔",
+      "سائن اپ کے بعد طالب علم سے چند سوالات: آپ کیسے سیکھنا پسند کرتے ہیں (تصاویر، سننا، پڑھنا، یا مکس)، زبان، آواز، حسی آرام، اور explanation style۔",
+      "یہ جوابات مستقل محفوظ رہتے ہیں — دوبارہ نہیں پوچھے جاتے۔ آٹی اسٹڈی ان سے ہر سبق ذاتی بناتا ہے۔",
     ],
   },
   {
@@ -154,7 +160,7 @@ const SECTIONS_UR: ManualSection[] = [
       "ایک نظر میں اپنے ستارے، دن کا سلسلہ، حل کیے گئے کوئز، اور درستگی دیکھیں۔",
       "سیکھنے کا وقت (آج / ہفتہ / کل)، مکمل اسباق، اور آج کا نرم شیڈول چیک کریں۔",
       "Mood check-in سے شروع کریں، پھر مسلسل دن پڑھائی پر Learner Journey درخت بڑھتا دیکھیں۔",
-      "Chat بٹن سے مضمون چنے بغیر ٹیوٹر کھولیں — یا مضمون کارڈ سے سیدھا شروع کریں۔",
+      "Chat بٹن سے ٹیوٹر کھولیں — یا مضمون کارڈ پر Study دبا کر Maths / Science وغیرہ شروع کریں۔",
       "\"وہیں سے جاری رکھیں\" سے ایک ٹیپ میں اپنی حالیہ گفتگو دوبارہ شروع کریں۔",
       "آپ کا avatar اور نام اوپر دکھائی دیتا ہے — Settings سے کبھی بھی avatar بدل سکتے ہیں۔",
     ],
@@ -207,12 +213,13 @@ const SECTIONS_UR: ManualSection[] = [
     title: "7. Settings — اپنی مرضی کے مطابق",
     intro: "نیویگیشن بار کے gear آئیکن سے کبھی بھی Settings کھولیں۔",
     steps: [
-      "Appearance — حروف کا سائز اور حرکات کم کریں پرسکون اسکرین کے لیے۔",
+      "Appearance — Light یا Dark تھیم (اس ڈیوائس پر محفوظ)، حروف کا سائز، اور کم animations۔",
       "Accessibility — زیادہ کانٹراسٹ، Focus Mode، اور خودکار پڑھنا۔",
-      "Voice — اپنے ٹیوٹر کی narrator آواز چنیں (6 options، ہر ایک preview button کے ساتھ)، اور پڑھنے کی رفتار اور والیوم adjust کریں۔ یہ ہر جگہ لاگو ہوتا ہے جہاں ٹیوٹر بولتا ہے۔",
+      "Voice — اپنے ٹیوٹر کی narrator آواز چنیں (6 options، ہر ایک preview)، رفتار اور والیوم۔",
       "Language — فوری طور پر انگریزی اور اردو کے درمیان بدلیں۔",
       "Profile — اپنا avatar بدلیں، اور نام، گریڈ، ستارے دیکھیں۔",
-      "Account — اپنا گریڈ/کلاس بدلیں، اپنا رجسٹرڈ ای میل بدلیں (پاس ورڈ کی تصدیق کے ساتھ)، پاس ورڈ تبدیل کریں، یا اکاؤنٹ مستقل طور پر حذف کریں۔",
+      "Family (طالب علم) — FAM-XXXXX invite بنائیں تاکہ والدین لنک کر سکیں؛ درخواست approve/reject کریں۔",
+      "Account — گریڈ بدلیں، ای میل بدلیں (پاس ورڈ تصدیق)، پاس ورڈ تبدیل کریں، یا اکاؤنٹ حذف کریں۔",
     ],
   },
   {
@@ -220,9 +227,10 @@ const SECTIONS_UR: ManualSection[] = [
     title: "8. والدین کے لیے",
     intro: "ہر سیشن پر نظر رکھے بغیر، نرمی سے باخبر رہیں۔",
     steps: [
-      "سائن اپ کے بعد آپ کے بچے کو 6 ہندسوں کا family code ملتا ہے — ان سے یہ کوڈ لیں۔",
-      "Parent اکاؤنٹ بنائیں اور family code، بچے کا نام، اور B-Form/CNIC تفصیلات درج کر کے لنک کریں۔",
-      "کوئز، درستگی، پسندیدہ مضامین، اور پڑھائی کے وقت کا خلاصہ دکھانے والا Parent Dashboard دیکھیں۔",
+      "Parent اکاؤنٹ بنائیں (ای میل OTP)، پھر بچے کے Settings → Family سے ملا FAM-XXXXX کوڈ redeem کریں۔",
+      "بچہ ایپ میں (یا ای میل لنک سے) لنک approve کرے گا۔ زیادہ سے زیادہ دو والدین لنک ہو سکتے ہیں۔",
+      "Parent Dashboard میں کوئز، درستگی، پسندیدہ مضامین، وقت، اور report دیکھیں۔",
+      "پاس ورڈ بھولنے پر بھی وہی طریقہ: Login → Forgot password → ای میل کوڈ → نیا پاس ورڈ۔",
     ],
   },
   {
@@ -242,7 +250,7 @@ const SECTIONS_UR: ManualSection[] = [
     steps: [
       "نیویگیشن بار (یا فوٹر) سے Contact کھولیں۔",
       "نام، ای میل، کردار (طالب علم / والدین / استاد)، موضوع، اور پیغام بھریں — پھر Send دبائیں۔",
-      "آپ کا پیغام AutiStudy ٹیم کے لیے محفوظ ہو جاتا ہے۔ صفحے پر دی گئی ٹیم ای میلز پر بھی لکھ سکتے ہیں۔",
+      "آپ کا پیغام support inbox پر بھیجا جاتا ہے اور ٹیم کے لیے محفوظ بھی ہوتا ہے۔ Contact صفحے کی ای میلز پر بھی لکھ سکتے ہیں۔",
     ],
   },
 ];
@@ -304,7 +312,7 @@ export default function ManualPage() {
       </div>
 
       <p className="no-print mt-10 text-center text-xs text-deep-muted">
-        {isUr ? "آٹی اسٹڈی v2.0 · 2026 · محبت سے بنایا گیا۔" : "AutiStudy v2.0 · 2026 · Built with care."}
+        {isUr ? "آٹی اسٹڈی v6 · 2026 · محبت سے بنایا گیا۔" : "AutiStudy v6 · 2026 · Built with care."}
       </p>
 
       <style jsx global>{`

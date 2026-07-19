@@ -318,20 +318,28 @@ html.dark select {
   }
 
   /*
-   * Primary CTA gradient — stays saturated blue→navy in BOTH themes.
-   * Do NOT use to-deep for white-text buttons: in dark mode --deep flips to light text.
+   * Primary CTA — saturated sky→cyan so buttons pop on dark cards;
+   * white label stays high-contrast. Do NOT use to-deep (flips light in dark mode).
    */
   .bg-cta {
-    background-image: linear-gradient(to bottom right, #3a96bc, #0f2d4a);
+    background-image: linear-gradient(to bottom right, #0ea5e9, #0284c7);
+    box-shadow: 0 8px 22px -10px rgba(14, 165, 233, 0.55);
   }
   .bg-cta-r {
-    background-image: linear-gradient(to right, #3a96bc, #0f2d4a);
+    background-image: linear-gradient(to right, #0ea5e9, #0284c7);
+    box-shadow: 0 8px 22px -10px rgba(14, 165, 233, 0.55);
   }
   html.dark .bg-cta {
-    background-image: linear-gradient(to bottom right, #1e6a8f, #071018);
+    background-image: linear-gradient(to bottom right, #0ea5e9, #0369a1);
+    box-shadow:
+      0 0 0 1px rgba(125, 211, 252, 0.55),
+      0 10px 28px -8px rgba(14, 165, 233, 0.75);
   }
   html.dark .bg-cta-r {
-    background-image: linear-gradient(to right, #1e6a8f, #071018);
+    background-image: linear-gradient(to right, #0ea5e9, #0369a1);
+    box-shadow:
+      0 0 0 1px rgba(125, 211, 252, 0.55),
+      0 10px 28px -8px rgba(14, 165, 233, 0.75);
   }
 
   .glass {

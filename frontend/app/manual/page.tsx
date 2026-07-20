@@ -312,7 +312,7 @@ export default function ManualPage() {
       </div>
 
       <p className="no-print mt-10 text-center text-xs text-deep-muted">
-        {isUr ? "آٹی اسٹڈی v6 · 2026 · محبت سے بنایا گیا۔" : "AutiStudy v6 · 2026 · Built with care."}
+        {isUr ? "آٹی اسٹڈی · 2026 · محبت سے بنایا گیا۔" : "AutiStudy · 2026 · Built with care."}
       </p>
 
       <style jsx global>{`
